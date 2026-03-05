@@ -1,0 +1,5 @@
+*.pdb
+*.clean*
+.idea/*
+.idea
+.DS_Store

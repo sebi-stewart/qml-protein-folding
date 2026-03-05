@@ -1,22 +1,13 @@
 import pyrosetta
-pyrosetta.init("-mute all")
+from benchmark import bpti_ryfyn_benchmark
+from rotamer_extraction import extract_top_n_rotamers
+from hamiltonian_creation import extract_hamiltonian_tensors, build_ising_hamiltonian
 
-def isolate_ryfyn_benchmark():
-    # fetch from the internet
-    full_pose = pyrosetta.toolbox.pose_from_rcsb("5PTI")
-    
-    assert full_pose.total_residue() == 58, "Unexpected PDB length."
+if __name__ == '__main__':
+    pyrosetta.init("-mute all")
 
-    # Remove everything apart from 20-24 --> Now we have a 5 residue length
-    full_pose.delete_residue_range_slow(25, full_pose.total_residue())
-    full_pose.delete_residue_range_slow(1, 19)
-
-    fragment_pose = full_pose
-
-    print(f"Fragment Sequence: {fragment_pose.sequence()}")
-    assert fragment_pose.sequence() == "RYFYN", "Fragment extraction failed."
-    print(f"Total Residues: {fragment_pose.total_residue()}")
-    
-    return fragment_pose
-
-isolate_ryfyn_benchmark()
+    benchmark_pose = bpti_ryfyn_benchmark()
+    rotamer_lib, ig, rot_sets = extract_top_n_rotamers(benchmark_pose)
+    h_linear, J_quadratic = extract_hamiltonian_tensors(rotamer_lib, ig, rot_sets)
+    H_target = build_ising_hamiltonian(h_linear, J_quadratic, penalty=500.0)
+    print(H_target)

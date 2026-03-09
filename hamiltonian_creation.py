@@ -51,6 +51,38 @@ def extract_hamiltonian_tensors(rotamer_library: dict, ig: InteractionGraphFacto
             
     return h_linear, J_quadratic
 
+def reduce_hamiltonian(h_linear, J_quadratic, rotamer_library):
+    fixed_res = [res for res, rots in rotamer_library.items() if len(rots) == 1]
+    flex_res = [res for res, rots in rotamer_library.items() if len(rots) > 1]
+
+    # 1. Initialize new dictionaries for the quantum-ready flexible residues
+    h_flex = {res: h_linear[res].copy() for res in flex_res}
+    J_flex = {}  # Will only contain edges between flex_res
+    global_offset = 0.0
+
+    for f in fixed_res:
+        global_offset += h_linear[f][0]
+        for f2 in fixed_res:
+            if f < f2 and (f, f2) not in J_quadratic:
+                continue
+            global_offset += J_quadratic[(f, f2)][(0, 0)]
+
+    # 3. Absorb Fixed-to-Flexible interactions into Flexible Linear Terms
+    for v in flex_res:
+        for rot_v in range(len(rotamer_library[v])):
+            for f in fixed_res:
+                edge = (min(v, f), max(v, f))
+                if edge in J_quadratic:
+                    idx = (rot_v, 0) if v < f else (0, rot_v)
+                    h_flex[v][rot_v] += J_quadratic[edge][idx]
+
+    # 4. Retain only Flexible-to-Flexible interactions
+    for (i, j), interactions in J_quadratic.items():
+        if i in flex_res and j in flex_res:
+            J_flex[(i, j)] = interactions
+
+    return h_flex, J_flex, global_offset
+
 
 def build_ising_hamiltonian(h_linear, J_quadratic, penalty=500.0, rotamers_per_res=4):
     """
@@ -60,7 +92,7 @@ def build_ising_hamiltonian(h_linear, J_quadratic, penalty=500.0, rotamers_per_r
     seq_positions = sorted(list(h_linear.keys()))
     num_residues = len(seq_positions)
     num_qubits = num_residues * rotamers_per_res
-    
+
     # Helper function to get wire index
     def get_wire(seq_idx, rot_idx):
         res_offset = seq_positions.index(seq_idx)
@@ -76,18 +108,18 @@ def build_ising_hamiltonian(h_linear, J_quadratic, penalty=500.0, rotamers_per_r
             k = get_wire(seq, rot)
             # Biological one-body energy - lambda penalty
             w_linear[k] = h_linear[seq][rot] - penalty
-            
+
             # Intra-residue penalty (2 * lambda)
             for rot_other in range(rot + 1, rotamers_per_res):
                 l = get_wire(seq, rot_other)
                 W_quadratic[(k, l)] = 2.0 * penalty
-                
+
     # Add Inter-residue biological energies (J_quadratic)
     for (seq_i, seq_j), interactions in J_quadratic.items():
         for (rot_i, rot_j), energy in interactions.items():
             k = get_wire(seq_i, rot_i)
             l = get_wire(seq_j, rot_j)
-            
+
             # Ensure k < l for the quadratic dictionary
             if k > l:
                 k, l = l, k
@@ -96,7 +128,7 @@ def build_ising_hamiltonian(h_linear, J_quadratic, penalty=500.0, rotamers_per_r
     # 4. Convert to Pauli-Z Ising Coefficients
     coeffs = []
     observables = []
-    
+
     # Constant term (Identity)
     C_id = (num_residues * penalty) + sum(w_linear.values()) / 2.0 + sum(W_quadratic.values()) / 4.0
     coeffs.append(C_id)
@@ -111,7 +143,7 @@ def build_ising_hamiltonian(h_linear, J_quadratic, penalty=500.0, rotamers_per_r
                 C_k -= W_quadratic[(k, l)] / 4.0
             elif l < k:
                 C_k -= W_quadratic[(l, k)] / 4.0
-                
+
         if abs(C_k) > 1e-6: # Sparsity check
             coeffs.append(C_k)
             observables.append(qml.PauliZ(k))

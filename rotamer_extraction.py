@@ -6,7 +6,6 @@ from pyrosetta.rosetta.core.pack.task import TaskFactory
 from pyrosetta.rosetta.core.pack.rotamer_set import RotamerSets
 from pyrosetta.rosetta.core.pack.interaction_graph import InteractionGraphFactory
 from pyrosetta.rosetta.core.pack import create_packer_graph, pack_rotamers_setup
-from pyrosetta.rosetta.protocols.simple_moves import MutateResidue
 from pyrosetta.rosetta.core.pose import remove_variant_type_from_pose_residue
 
 
@@ -64,6 +63,7 @@ def extract_top_n_rotamers(pose, n=4) -> Tuple[dict, InteractionGraphFactory, Ro
         rotamer_library[seqpos] = top_n_data
         
     return rotamer_library, ig, rot_sets
+
 
 def safe_score_pose(scorefxn, pose, max_retries=3):
     attempts = 0

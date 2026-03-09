@@ -84,7 +84,7 @@ def reduce_hamiltonian(h_linear, J_quadratic, rotamer_library):
     return h_flex, J_flex, global_offset
 
 
-def build_ising_hamiltonian(h_flex, J_flex, global_offset, penalty=500.0):
+def build_ising_hamiltonian(h_flex, J_flex, global_offset, penalty=500.0) -> qml.Hamiltonian:
     """
     Compiles the reduced classical PyRosetta tensors into a PennyLane Pauli-Z Hamiltonian,
     incorporating the background thermodynamic offset.
@@ -104,21 +104,22 @@ def build_ising_hamiltonian(h_flex, J_flex, global_offset, penalty=500.0):
     w_linear = {k: 0.0 for k in range(num_qubits)}
     W_quadratic = {(k, l): 0.0 for k in range(num_qubits) for l in range(num_qubits) if k < l}
 
-    # 1. Populate unified weights (Biology + Penalty)
+    # 1.1 Populate unified weights - Biological Terms for Linear + Penalty (both)
     for seq in seq_positions:
-        rotamers_per_res = len(h_flex[seq])
+        rotamers_in_cur_res = len(h_flex[seq])
         base_wire = wire_offsets[seq]
 
-        for rot in range(rotamers_per_res):
+        for rot in range(rotamers_in_cur_res):
             k = base_wire + rot
+            # Subtract the penalty to the linear term to discourage the VQE from picking 0 rotamers
             w_linear[k] = h_flex[seq][rot] - penalty
 
             # Intra-residue penalty
-            for rot_other in range(rot + 1, rotamers_per_res):
+            for rot_other in range(rot + 1, rotamers_in_cur_res):
                 l = base_wire + rot_other
                 W_quadratic[(k, l)] = 2.0 * penalty
 
-    # Inter-residue biological energies
+    # 1.2 Populate unified weights - Biological terms for quadratic term
     for (seq_i, seq_j), interactions in J_flex.items():
         for (rot_i, rot_j), energy in interactions.items():
             k = wire_offsets[seq_i] + rot_i
@@ -130,13 +131,26 @@ def build_ising_hamiltonian(h_flex, J_flex, global_offset, penalty=500.0):
     coeffs = []
     observables = []
 
+    # Full equation
+    # Linear term:
+    # W_k * (1 - Z_k)/2 = W_k/2 - W_k/2 * Z_k
+
+    # Quadratic Term:
+    # W_kl * (1 - Z_k)/2 * (1 - Z_l)/2 = W_kl/4 - W_kl/4 * Z_k - W_kl/4 * Z_l + W_kl/4 * Z_k * Z_l
+
+    # Some of these terms depend on Z_k or Z_l (or both), these terms are added to the hamiltonian in the below for loops
+    # Terms such as W_k/2 and W_kl/4 are constant, and therefore added to the constant C_id global offset
+    # This acts as an optimisation
+
     # 2. Add the Classical Global Offset to the Identity Term
     # C_id = Offset + (N * lambda) + sum(w_k / 2) + sum(W_kl / 4)
     C_id = global_offset + (num_residues * penalty) + (sum(w_linear.values()) / 2.0) + (sum(W_quadratic.values()) / 4.0)
 
-    if abs(C_id) > 1e-6:
+    near_zero_value = lambda x: abs(x) < 1e-6 # helper function to avoid extra computation by near zero values aka. rounding issues
+
+    if not near_zero_value(C_id):
         coeffs.append(C_id)
-        observables.append(qml.Identity(0))
+        observables.append(qml.Identity(wires=0))
 
     # 3. Z and ZZ terms (Standard Ising Substitution)
     for k in range(num_qubits):
@@ -147,15 +161,17 @@ def build_ising_hamiltonian(h_flex, J_flex, global_offset, penalty=500.0):
             elif l < k:
                 C_k -= W_quadratic[(l, k)] / 4.0
 
-        if abs(C_k) > 1e-6:
-            coeffs.append(C_k)
-            observables.append(qml.PauliZ(k))
+        if near_zero_value(C_k): continue
+
+        coeffs.append(C_k)
+        observables.append(qml.PauliZ(wires=k))
 
     for (k, l), W_kl in W_quadratic.items():
         C_kl = W_kl / 4.0
-        if abs(C_kl) > 1e-6:
-            coeffs.append(C_kl)
-            observables.append(qml.PauliZ(k) @ qml.PauliZ(l))
+        if near_zero_value(C_kl): continue
+
+        coeffs.append(C_kl)
+        observables.append(qml.PauliZ(wires=k) @ qml.PauliZ(wires=l))
 
     print(f"Reduced Hamiltonian built: {num_qubits} Qubits, {len(coeffs)} Pauli strings.")
-    return qml.Hamiltonian(coeffs, observables)
+    return qml.dot(coeffs, observables)

@@ -84,77 +84,78 @@ def reduce_hamiltonian(h_linear, J_quadratic, rotamer_library):
     return h_flex, J_flex, global_offset
 
 
-def build_ising_hamiltonian(h_linear, J_quadratic, penalty=500.0, rotamers_per_res=4):
+def build_ising_hamiltonian(h_flex, J_flex, global_offset, penalty=500.0):
     """
-    Algebraically pre-compiles classical PyRosetta tensors into a PennyLane Pauli-Z Hamiltonian.
+    Compiles the reduced classical PyRosetta tensors into a PennyLane Pauli-Z Hamiltonian,
+    incorporating the background thermodynamic offset.
     """
-    # 1. Map sequence positions to deterministic wire (qubit) indices
-    seq_positions = sorted(list(h_linear.keys()))
+    seq_positions = sorted(list(h_flex.keys()))
     num_residues = len(seq_positions)
-    num_qubits = num_residues * rotamers_per_res
 
-    # Helper function to get wire index
-    def get_wire(seq_idx, rot_idx):
-        res_offset = seq_positions.index(seq_idx)
-        return (res_offset * rotamers_per_res) + rot_idx
+    # Track dynamic wire allocation (Prefix Sum)
+    wire_offsets = {}
+    current_wire = 0
+    for seq in seq_positions:
+        wire_offsets[seq] = current_wire
+        current_wire += len(h_flex[seq])
 
-    # 2. Initialize unified weight arrays
+    num_qubits = current_wire
+
     w_linear = {k: 0.0 for k in range(num_qubits)}
     W_quadratic = {(k, l): 0.0 for k in range(num_qubits) for l in range(num_qubits) if k < l}
 
-    # 3. Populate unified weights (Biology + Penalty)
+    # 1. Populate unified weights (Biology + Penalty)
     for seq in seq_positions:
-        for rot in range(rotamers_per_res):
-            k = get_wire(seq, rot)
-            # Biological one-body energy - lambda penalty
-            w_linear[k] = h_linear[seq][rot] - penalty
+        rotamers_per_res = len(h_flex[seq])
+        base_wire = wire_offsets[seq]
 
-            # Intra-residue penalty (2 * lambda)
+        for rot in range(rotamers_per_res):
+            k = base_wire + rot
+            w_linear[k] = h_flex[seq][rot] - penalty
+
+            # Intra-residue penalty
             for rot_other in range(rot + 1, rotamers_per_res):
-                l = get_wire(seq, rot_other)
+                l = base_wire + rot_other
                 W_quadratic[(k, l)] = 2.0 * penalty
 
-    # Add Inter-residue biological energies (J_quadratic)
-    for (seq_i, seq_j), interactions in J_quadratic.items():
+    # Inter-residue biological energies
+    for (seq_i, seq_j), interactions in J_flex.items():
         for (rot_i, rot_j), energy in interactions.items():
-            k = get_wire(seq_i, rot_i)
-            l = get_wire(seq_j, rot_j)
+            k = wire_offsets[seq_i] + rot_i
+            l = wire_offsets[seq_j] + rot_j
 
-            # Ensure k < l for the quadratic dictionary
-            if k > l:
-                k, l = l, k
+            if k > l: k, l = l, k
             W_quadratic[(k, l)] += energy
 
-    # 4. Convert to Pauli-Z Ising Coefficients
     coeffs = []
     observables = []
 
-    # Constant term (Identity)
-    C_id = (num_residues * penalty) + sum(w_linear.values()) / 2.0 + sum(W_quadratic.values()) / 4.0
-    coeffs.append(C_id)
-    observables.append(qml.Identity(0)) # Identity on any wire acts globally
+    # 2. Add the Classical Global Offset to the Identity Term
+    # C_id = Offset + (N * lambda) + sum(w_k / 2) + sum(W_kl / 4)
+    C_id = global_offset + (num_residues * penalty) + (sum(w_linear.values()) / 2.0) + (sum(W_quadratic.values()) / 4.0)
 
-    # Z terms
+    if abs(C_id) > 1e-6:
+        coeffs.append(C_id)
+        observables.append(qml.Identity(0))
+
+    # 3. Z and ZZ terms (Standard Ising Substitution)
     for k in range(num_qubits):
         C_k = -w_linear[k] / 2.0
-        # Subtract W_kl / 4 for all connected edges
         for l in range(num_qubits):
             if k < l:
                 C_k -= W_quadratic[(k, l)] / 4.0
             elif l < k:
                 C_k -= W_quadratic[(l, k)] / 4.0
 
-        if abs(C_k) > 1e-6: # Sparsity check
+        if abs(C_k) > 1e-6:
             coeffs.append(C_k)
             observables.append(qml.PauliZ(k))
 
-    # ZZ terms
     for (k, l), W_kl in W_quadratic.items():
         C_kl = W_kl / 4.0
         if abs(C_kl) > 1e-6:
             coeffs.append(C_kl)
             observables.append(qml.PauliZ(k) @ qml.PauliZ(l))
 
-    # 5. Return the PennyLane Hamiltonian
-    print(f"Constructed Hamiltonian with {len(coeffs)} Pauli strings.")
+    print(f"Reduced Hamiltonian built: {num_qubits} Qubits, {len(coeffs)} Pauli strings.")
     return qml.Hamiltonian(coeffs, observables)

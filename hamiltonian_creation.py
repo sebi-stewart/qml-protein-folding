@@ -63,7 +63,7 @@ def reduce_hamiltonian(h_linear, J_quadratic, rotamer_library):
     for f in fixed_res:
         global_offset += h_linear[f][0]
         for f2 in fixed_res:
-            if f < f2 and (f, f2) not in J_quadratic:
+            if f < f2 or (f, f2) not in J_quadratic:
                 continue
             global_offset += J_quadratic[(f, f2)][(0, 0)]
 

@@ -7,6 +7,7 @@ from pyrosetta.rosetta.core.pack.rotamer_set import RotamerSets
 from pyrosetta.rosetta.core.pack.interaction_graph import InteractionGraphFactory
 from pyrosetta.rosetta.core.pack import create_packer_graph, pack_rotamers_setup
 from pyrosetta.rosetta.protocols.simple_moves import MutateResidue
+from pyrosetta.rosetta.core.pose import remove_variant_type_from_pose_residue
 
 
 def extract_top_n_rotamers(pose, n=4) -> Tuple[dict, InteractionGraphFactory, RotamerSets]:
@@ -20,7 +21,7 @@ def extract_top_n_rotamers(pose, n=4) -> Tuple[dict, InteractionGraphFactory, Ro
     # we will modify this to only take into account hyrogen interactions and
     print("Creating score function")
     scorefxn = pyrosetta.get_fa_scorefxn()
-    score_pose(scorefxn, pose)
+    pose = safe_score_pose(scorefxn, pose)
 
     print("Creating Repacking Task - Core Rotamer Optimisation Protocol")
     task = TaskFactory.create_packer_task(pose)
@@ -64,35 +65,48 @@ def extract_top_n_rotamers(pose, n=4) -> Tuple[dict, InteractionGraphFactory, Ro
         
     return rotamer_library, ig, rot_sets
 
-def safe_score_pose(scorefxn, pose, retries=3):
+def safe_score_pose(scorefxn, pose, max_retries=3):
+    attempts = 0
 
-    try:
-        scorefxn(pose)
+    clean_backup = pose.clone()
 
-    except RuntimeError as e:
-        error_msg = str(e)
-        fixed = False
-        if "FullatomDisulfideEnergyContainer.cc" in error_msg:
-            fixed = fix_disulfide_bond(pose)
+    while attempts < max_retries:
+        try:
+            scorefxn(pose)
+            print("Pose scored successfully!")
+            return pose
 
-        if fixed:
+        except RuntimeError as e:
+            error_msg = str(e)
+            fixed = False
+            attempts += 1
 
-        print(error_msg)
+            if "FullatomDisulfideEnergyContainer.cc" in error_msg:
+                fixed = fix_disulfide_bond(clean_backup)
+
+            if fixed:
+                print("Retrying score...\n")
+                pose.assign(clean_backup)
+            else:
+                print("Could not find (or fix) error for", error_msg)
+                raise e
+    raise RuntimeError("Exceeded maximum retries for fixing the pose.")
+
 
 def fix_disulfide_bond(pose):
     for i in range(1, pose.total_residue() + 1):
         res = pose.residue(i)
 
-        if res.name3() == "CYS" and res.has_variant_type(DISULFIDE):
-            # Connection 3 is the side-chain SG-SG bond. Let's find the partner!
-            partner_id = res.connect_map(3).resid()
+        if not res.name3() == "CYS" or not res.has_variant_type(DISULFIDE):
+            continue
+        # Connection 3 is the side-chain SG-SG bond. Let's find the partner!
+        partner_id = res.connect_map(3).resid()
 
-            # Check if the partner is missing (0) or outside our fragment
-            if partner_id == 0 or partner_id > pose.total_residue():
-                print(f" -> Dangling disulfide at CYS {i} (pointed to missing partner {partner_id}). Fixing...")
-                mutator = MutateResidue(i, "CYS")
-                mutator.apply(pose)
-                return True
-            # else:
-            #     print(f" -> Intact disulfide found between CYS {i} and CYS {partner_id}. Preserving!")
+        # Check if the partner is missing (0) or outside our fragment
+        if partner_id == 0 or partner_id > pose.total_residue():
+            print(f" -> Dangling disulfide at CYS {i} (pointed to missing partner {partner_id}). Fixing...")
+            remove_variant_type_from_pose_residue(pose, DISULFIDE, i)
+            return True
+        # else:
+        #     print(f" -> Intact disulfide found between CYS {i} and CYS {partner_id}. Preserving!")
     return False

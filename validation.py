@@ -29,13 +29,11 @@ def validate_conformations(conformations, probabilities, params):
                 break  # Fails the penalty constraint
 
         if is_valid:
-            # 3. Calculate True Biological Energy (Classical PyRosetta Equation)
-            # using the valid bitstring against the original h_flex and J_flex tensors.
-            bio_energy = 0  # calculate_classical_energy(bitstring, h_flex, J_flex, global_offset)
             valid_conformations.append({
                 "bitstring": bitstring,
                 "probability": probabilities[idx],
-                "energy": bio_energy
+                "quantum_energy": None,
+                "biological_energy": None,
             })
     print(wire_offsets)
     if not valid_conformations:

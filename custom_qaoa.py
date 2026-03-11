@@ -5,8 +5,9 @@ def qaoa_func_generator(H_ising, mixer_layer, generator_params):
     wire_offsets = generator_params['wire_offsets']
     seq_positions = generator_params['seq_positions']
     rotamer_counts = generator_params['rotamer_counts']
+    use_gpu = generator_params["use_gpu"]
 
-    dev = qml.device('lightning.gpu', wires=range(num_qubits))
+    dev = qml.device('lightning.gpu' if use_gpu else 'lightning.qubit', wires=range(num_qubits))
 
     def qaoa_layer(gamma, beta):
         qml.qaoa.cost_layer(gamma, H_ising)

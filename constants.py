@@ -7,3 +7,6 @@ OPTIMISER_EPOCHS = 150
 TOP_CONFORMATION_COUNTS = 100
 
 IS_LINUX = sys.platform == "linux"
+
+if not IS_LINUX:
+    QAOA_LAYERS = 2

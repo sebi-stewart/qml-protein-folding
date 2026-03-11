@@ -12,7 +12,7 @@ def init_generator_params(h_flex_linear):
         rotamer_counts[seq] = len(h_flex_linear[seq])
         current_wire += len(h_flex_linear[seq])
 
-    num_qubits = rotamer_counts.values()
+    num_qubits = sum(rotamer_counts.values())
 
 
     generator_params = {

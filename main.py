@@ -3,6 +3,8 @@ from benchmark import bpti_ryfyn_benchmark
 from rotamer_extraction import extract_top_n_rotamers
 from hamiltonian_creation import extract_hamiltonian_tensors, build_ising_hamiltonian
 from initialisation import initialize_rosetta
+import pennylane as qml
+
 
 
 if __name__ == '__main__':

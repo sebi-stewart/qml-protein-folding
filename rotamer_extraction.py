@@ -62,7 +62,7 @@ def extract_top_n_rotamers(pose, n=4) -> Tuple[dict, InteractionGraphFactory, Ro
         top_n_data = [(energy, rot_index, res) for energy, rot_index, res in scored_rotamers[:n]]
         rotamer_library[seqpos] = top_n_data
         
-    return rotamer_library, ig, rot_sets
+    return rotamer_library, ig, rot_sets, scorefxn
 
 
 def safe_score_pose(scorefxn, pose, max_retries=3):

@@ -18,7 +18,7 @@ if __name__ == '__main__':
 
     # Pyrosetta Relevant Code
     benchmark_pose = bpti_ryfyn_benchmark()
-    rotamer_lib, ig, rot_sets = extract_top_n_rotamers(benchmark_pose)
+    rotamer_lib, ig, rot_sets, scorefxn = extract_top_n_rotamers(benchmark_pose)
 
     # Generating QUBO (Quadratic Unconstrained Binary Optimisation) Model, and then reduce it
     h_linear, J_quadratic = extract_hamiltonian_tensors(rotamer_lib, ig, rot_sets)

@@ -1,12 +1,11 @@
 import pyrosetta
-import pennylane as qml
-import pennylane.numpy as np
+import numpy as np
 
 from benchmark import bpti_ryfyn_benchmark
 from rotamer_extraction import extract_top_n_rotamers
 from h_ising_creation import extract_hamiltonian_tensors, build_ising_hamiltonian, reduce_hamiltonian
 from initialisation import initialize_rosetta
-from custom_qaoa import qaoa_func_generator
+from custom_qaoa import qaoa_func_generator, run_qaoa
 from h_mixer import custom_xy_mixer_layer
 
 from constants import *
@@ -46,41 +45,9 @@ if __name__ == '__main__':
     }
     cost_function, sample_function = qaoa_func_generator(H_ising, custom_xy_mixer_layer, generator_params)
 
-    p = QAOA_LAYERS
-    np.random.seed(RAND_SEED)
-    # Initialize parameters close to zero to avoid barren plateaus
-    initial_params = np.random.uniform(low=-0.01, high=0.01, size=(2, p), requires_grad=True)
-
-    opt = qml.AdamOptimizer(stepsize=OPTIMISER_STEPSIZE)
-    epochs = OPTIMISER_EPOCHS
-    current_params = initial_params
-    lowest_param_set = (float('inf'), current_params)
-
-    print("Commencing QAOA Optimization...")
-    for epoch in range(epochs):
-        current_params, cost = opt.step_and_cost(cost_function, current_params)
-        if cost < lowest_param_set[0]:
-            lowest_param_set = (cost, current_params)
-        if epoch % 10 == 0:
-            print(f"Epoch {epoch:3d} | Cost: {cost:.4f}")
-
-    print("Optimization converged.")
-
-    print(f"Lowest parameter cost: {lowest_param_set[0]}")
-    # probabilities = sample_function(lowest_param_set[1])
-    probabilities = sample_function(current_params)
+    final_params = run_qaoa(cost_function)
+    probabilities = sample_function(final_params)
 
     # np.argsort returns indices; we take the last 'TOP_CONFORMATION_COUNTS' and reverse them for descending order
     top_indices = list(np.argsort(probabilities)[-TOP_CONFORMATION_COUNTS:][::-1])
     valid_conformations = validate_conformations(top_indices, probabilities, generator_params)
-
-
-    # Sort the strictly valid conformations by their true biological energy
-    valid_conformations.sort(key=lambda x: x['energy'])
-    best_conformation = valid_conformations[0]
-
-    print(f"Optimal Valid Sequence: {best_conformation['bitstring']}")
-    print(f"Classical Energy: {best_conformation['energy']} kcal/mol")
-    print(f"Valid to Non-Valid Ration: {len(valid_conformations)} - {len(top_indices) - len(valid_conformations)}")
-
-    # print(H_target)

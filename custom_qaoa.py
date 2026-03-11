@@ -1,4 +1,6 @@
 import pennylane as qml
+from constants import *
+import pennylane.numpy as np
 
 def qaoa_func_generator(H_ising, mixer_layer, generator_params):
     num_qubits = generator_params["num_qubits"]
@@ -44,3 +46,22 @@ def qaoa_func_generator(H_ising, mixer_layer, generator_params):
         return qml.probs(wires=range(num_qubits))
 
     return cost_function, sample_function
+
+def run_qaoa(cost_function):
+    p = QAOA_LAYERS
+    np.random.seed(RAND_SEED)
+    # Initialize parameters close to zero to avoid barren plateaus
+    initial_params = np.random.uniform(low=-0.01, high=0.01, size=(2, p), requires_grad=True)
+
+    opt = qml.AdamOptimizer(stepsize=OPTIMISER_STEPSIZE)
+    epochs = OPTIMISER_EPOCHS
+    current_params = initial_params
+
+    print("Commencing QAOA Optimization...")
+    for epoch in range(epochs):
+        current_params, cost = opt.step_and_cost(cost_function, current_params)
+        if epoch % 10 == 0:
+            print(f"Epoch {epoch:3d} | Cost: {cost:.4f}")
+
+    print("Optimization converged.")
+    return current_params

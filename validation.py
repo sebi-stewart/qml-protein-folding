@@ -41,3 +41,13 @@ def validate_conformations(conformations, probabilities, params):
     if not valid_conformations:
         raise ValueError(
             "Zero valid conformations found in the top sampled states. You must increase QAOA depth 'p' or increase the penalty multiplier.")
+
+    valid_conformations.sort(key=lambda x: x['energy'])
+    best_conformation = valid_conformations[0]
+
+    print(f"Optimal Valid Sequence: {best_conformation['bitstring']}")
+    print(f"Classical Energy: {best_conformation['energy']} kcal/mol")
+    print(f"Valid to Non-Valid Ration: {len(valid_conformations)} - {len(conformations) - len(valid_conformations)}")
+
+    return valid_conformations
+

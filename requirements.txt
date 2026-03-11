@@ -7,6 +7,8 @@ cachetools==7.0.5
 certifi==2026.2.25
 charset-normalizer==3.4.5
 comm==0.2.3
+custatevec-cu11==1.9.0.post0
+custatevec-cu12==1.12.0
 debugpy==1.8.20
 decorator==5.2.1
 diastatic-malt==2.15.2
@@ -23,10 +25,15 @@ matplotlib-inline==0.2.1
 nest-asyncio==1.6.0
 networkx==3.6.1
 numpy==2.4.3
+nvidia-cublas-cu12==12.9.1.4
+nvidia-cuda-runtime-cu12==12.9.79
+nvidia-cusparse-cu12==12.5.10.65
+nvidia-nvjitlink-cu12==12.9.86
 packaging==26.0
 parso==0.8.6
 pennylane==0.44.1
 pennylane_lightning==0.44.0
+pennylane_lightning_gpu==0.44.0
 pexpect==4.9.0
 platformdirs==4.9.4
 prompt_toolkit==3.0.52

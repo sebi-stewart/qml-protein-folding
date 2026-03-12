@@ -17,18 +17,11 @@ def extract_hamiltonian_tensors(rotamer_library: dict, ig: InteractionGraphFacto
     
     # 1. Store linear terms (One-body energies)
     for i in seq_positions:
-        # We enforce a strict 0 to 3 internal index for the 4 qubits per residue
-        h_linear[i] = {qubit_idx: data[0] for qubit_idx, data in enumerate(rotamer_library[i])}
+        h_linear[i] = {idx: data[0] for idx, data in enumerate(rotamer_library[i])}
 
-        node = ig.get_node(i)
-        num_rotamers = node.get_num_states()
-        alternate = [node.get_one_body_energy(r) for r in range(1, num_rotamers + 1)]
-        print(h_linear[i], alternate)
-        
     # 2. Extract quadratic terms (Two-body energies)
     # Iterate over all unique pairs of residues
     for seq_i, seq_j in itertools.combinations(seq_positions, 2):
-        if seq_i >= seq_j: continue
 
         molten_i = seq_to_molten[seq_i]
         molten_j = seq_to_molten[seq_j]
@@ -37,15 +30,14 @@ def extract_hamiltonian_tensors(rotamer_library: dict, ig: InteractionGraphFacto
         if not ig.get_edge_exists(molten_i, molten_j): continue
         edge = ig.find_edge(molten_i, molten_j)
         
+        # Iterate through the top rotamers of residues i,j
+        # and create an interaction graph between all their possible rotamer conformations
         interaction_matrix = {}
 
-        # Iterate through the top 4 rotamers of residue i
-        for q_idx_i, data_i in enumerate(rotamer_library[seq_i]):
-            rot_index_i = data_i[1] # The original C++ state index
-
-            # Iterate through the top 4 rotamers of residue j
-            for q_idx_j, data_j in enumerate(rotamer_library[seq_j]):
-                rot_index_j = data_j[1]
+        for q_idx_i, rot_lib_entry_i in enumerate(rotamer_library[seq_i]):
+            for q_idx_j, rot_lib_entry_j in enumerate(rotamer_library[seq_j]):
+                rot_index_i = rot_lib_entry_i[1]  # Pyrosetta rotamer index
+                rot_index_j = rot_lib_entry_j[1]
 
                 # Query the C++ backend for the pairwise energy
                 pair_energy = edge.get_two_body_energy(rot_index_i, rot_index_j)

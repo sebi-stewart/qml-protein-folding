@@ -19,36 +19,40 @@ def extract_hamiltonian_tensors(rotamer_library: dict, ig: InteractionGraphFacto
     for i in seq_positions:
         # We enforce a strict 0 to 3 internal index for the 4 qubits per residue
         h_linear[i] = {qubit_idx: data[0] for qubit_idx, data in enumerate(rotamer_library[i])}
+
+        node = ig.get_node(i)
+        num_rotamers = node.get_num_states()
+        alternate = [node.get_one_body_energy(r) for r in range(1, num_rotamers + 1)]
+        print(h_linear[i], alternate)
         
     # 2. Extract quadratic terms (Two-body energies)
     # Iterate over all unique pairs of residues
-    for i, j in itertools.combinations(seq_positions, 2):
-        molten_i = seq_to_molten[i]
-        molten_j = seq_to_molten[j]
-        
+    for seq_i, seq_j in itertools.combinations(seq_positions, 2):
+        if seq_i >= seq_j: continue
+
+        molten_i = seq_to_molten[seq_i]
+        molten_j = seq_to_molten[seq_j]
+
         # Check if an edge exists in the Interaction Graph
-        if ig.get_edge_exists(molten_i, molten_j):
-            J_quadratic[(i, j)] = {}
-            
-            # Iterate through the top 4 rotamers of residue i
-            for q_idx_i, data_i in enumerate(rotamer_library[i]):
-                rot_index_i = data_i[1] # The original C++ state index
-                
-                # Iterate through the top 4 rotamers of residue j
-                for q_idx_j, data_j in enumerate(rotamer_library[j]):
-                    rot_index_j = data_j[1]
-                    
-                    # Query the C++ backend for the pairwise energy
-                    pair_energy = ig.get_two_body_energy_for_edge(
-                        molten_i, molten_j, rot_index_i, rot_index_j
-                    )
-                    
-                    # Store mapping: (qubit_offset_i, qubit_offset_j) -> Energy
-                    J_quadratic[(i, j)][(q_idx_i, q_idx_j)] = pair_energy
-        else:
-            # If nodes are too far apart (e.g., > 10 Angstroms), interaction is 0
-            J_quadratic[(i, j)] = { (q_i, q_j): 0.0 for q_i in range(4) for q_j in range(4) }
-            
+        if not ig.get_edge_exists(molten_i, molten_j): continue
+        edge = ig.find_edge(molten_i, molten_j)
+        
+        J_quadratic[(seq_i, seq_j)] = {}
+
+        # Iterate through the top 4 rotamers of residue i
+        for q_idx_i, data_i in enumerate(rotamer_library[seq_i]):
+            rot_index_i = data_i[1] # The original C++ state index
+
+            # Iterate through the top 4 rotamers of residue j
+            for q_idx_j, data_j in enumerate(rotamer_library[seq_j]):
+                rot_index_j = data_j[1]
+
+                # Query the C++ backend for the pairwise energy
+                pair_energy = edge.get_two_body_energy(rot_index_i, rot_index_j)
+
+                # Store mapping: (qubit_offset_i, qubit_offset_j) -> Energy
+                J_quadratic[(seq_i, seq_j)][(q_idx_i, q_idx_j)] = pair_energy
+
     return h_linear, J_quadratic
 
 def reduce_hamiltonian(h_linear, J_quadratic, rotamer_library):

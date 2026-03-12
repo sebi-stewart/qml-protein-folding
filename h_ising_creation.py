@@ -37,7 +37,7 @@ def extract_hamiltonian_tensors(rotamer_library: dict, ig: InteractionGraphFacto
         if not ig.get_edge_exists(molten_i, molten_j): continue
         edge = ig.find_edge(molten_i, molten_j)
         
-        J_quadratic[(seq_i, seq_j)] = {}
+        interaction_matrix = {}
 
         # Iterate through the top 4 rotamers of residue i
         for q_idx_i, data_i in enumerate(rotamer_library[seq_i]):
@@ -51,7 +51,10 @@ def extract_hamiltonian_tensors(rotamer_library: dict, ig: InteractionGraphFacto
                 pair_energy = edge.get_two_body_energy(rot_index_i, rot_index_j)
 
                 # Store mapping: (qubit_offset_i, qubit_offset_j) -> Energy
-                J_quadratic[(seq_i, seq_j)][(q_idx_i, q_idx_j)] = pair_energy
+                interaction_matrix[(q_idx_i, q_idx_j)] = pair_energy
+
+        if interaction_matrix:
+            J_quadratic[(seq_i, seq_j)] = interaction_matrix
 
     return h_linear, J_quadratic
 

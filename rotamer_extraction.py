@@ -8,6 +8,28 @@ from pyrosetta.rosetta.core.pack.interaction_graph import InteractionGraphFactor
 from pyrosetta.rosetta.core.pack import create_packer_graph, pack_rotamers_setup
 from pyrosetta.rosetta.core.pose import remove_variant_type_from_pose_residue
 
+def get_score_function():
+    scorefxn = pyrosetta.rosetta.core.scoring.ScoreFunction()
+
+    # Internal Side chain energies:
+    # fa_dun                                     Internal energy of sidechain rotamers as derived from Dunbrack's statistics (2010 Rotamer Library used in Talaris2013).  Supports any residue type for which a rotamer library is avalable.
+    scorefxn.set_weight(pyrosetta.rosetta.core.scoring.fa_dun, 0.7)
+
+    # Hydrogen bonding
+    # hbond_bb_sc                                Sidechain-backbone hydrogen bond energy.
+    # hbond_sc                                   Sidechain-sidechain hydrogen bond energy.
+    scorefxn.set_weight(pyrosetta.rosetta.core.scoring.hbond_bb_sc, 1.0)
+    scorefxn.set_weight(pyrosetta.rosetta.core.scoring.hbond_sc, 1.0)
+
+    # Hyrdrophobic interactions
+    # fa_atr                                     Lennard-Jones attractive between atoms in different residues.  Supports canonical and noncanonical residue types.
+    # fa_rep                                     Lennard-Jones repulsive between atoms in different residues.  Supports canonical and noncanonical residue types.
+    scorefxn.set_weight(pyrosetta.rosetta.core.scoring.fa_atr , 1.0)
+    scorefxn.set_weight(pyrosetta.rosetta.core.scoring.fa_rep, 1.0)
+
+
+    return scorefxn
+
 
 def extract_top_n_rotamers(pose, n=4) -> Tuple[dict, InteractionGraphFactory, RotamerSets]:
     """
@@ -19,7 +41,7 @@ def extract_top_n_rotamers(pose, n=4) -> Tuple[dict, InteractionGraphFactory, Ro
     # scorefxn --> Score function
     # we will modify this to only take into account hyrogen interactions and
     print("Creating score function")
-    scorefxn = pyrosetta.get_fa_scorefxn()
+    scorefxn = get_score_function()
     pose = safe_score_pose(scorefxn, pose)
 
     print("Creating Repacking Task - Core Rotamer Optimisation Protocol")

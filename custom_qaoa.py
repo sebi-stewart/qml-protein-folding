@@ -57,7 +57,7 @@ def run_qaoa(cost_function):
     epochs = OPTIMISER_EPOCHS
     current_params = initial_params
 
-    print("Commencing QAOA Optimization...")
+    print(f"Commencing QAOA Optimization [p={p}]...")
     for epoch in range(epochs):
         current_params, cost = opt.step_and_cost(cost_function, current_params)
         if epoch % 10 == 0:

@@ -34,6 +34,7 @@ def validate_conformations(conformations, probabilities, params):
                 "probability": probabilities[idx],
                 "quantum_energy": None,
                 "biological_energy": None,
+                "pose": None,
             })
     print(wire_offsets)
     if not valid_conformations:

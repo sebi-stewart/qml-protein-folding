@@ -2,8 +2,6 @@
 def evaluate_quantum_energies(valid_conformations, h_flex, J_flex, global_offset, params):
     wire_offsets = params["wire_offsets"]
 
-
-
     for conformation in valid_conformations:
         bitstring = conformation["bitstring"]
         current_energy = global_offset

@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Dict, List
 
 import pyrosetta
 from pyrosetta.rosetta.core.chemical import DISULFIDE
@@ -7,6 +7,14 @@ from pyrosetta.rosetta.core.pack.rotamer_set import RotamerSets
 from pyrosetta.rosetta.core.pack.interaction_graph import InteractionGraphFactory
 from pyrosetta.rosetta.core.pack import create_packer_graph, pack_rotamers_setup
 from pyrosetta.rosetta.core.pose import remove_variant_type_from_pose_residue
+from dataclasses import dataclass
+
+@dataclass
+class TrackedRotamer:
+    one_body_energy: float
+    original_pyrosetta_index: int
+    residue: object
+
 
 def get_score_function():
     scorefxn = pyrosetta.rosetta.core.scoring.ScoreFunction()
@@ -31,7 +39,7 @@ def get_score_function():
     return scorefxn
 
 
-def extract_top_n_rotamers(pose, n=4) -> Tuple[dict, InteractionGraphFactory, RotamerSets]:
+def extract_top_n_rotamers(pose, n=4) -> Tuple[Dict[int, List[TrackedRotamer]], InteractionGraphFactory, RotamerSets, object]:
     """
     Extracts the top N lowest-energy rotamers for each packable residue using a precomputed Interaction Graph.
     """
@@ -81,8 +89,16 @@ def extract_top_n_rotamers(pose, n=4) -> Tuple[dict, InteractionGraphFactory, Ro
 
         # Keep the lowest N energy rotamer states, throw out the rest
         scored_rotamers.sort(key=lambda x: x[0])
-        top_n_data = [(energy, rot_index, res) for energy, rot_index, res in scored_rotamers[:n]]
-        rotamer_library[seqpos] = top_n_data
+        top_n_tracked = []
+        for energy, rot_index, rotamer_res in scored_rotamers[:n]:
+            tracked_rotamer = TrackedRotamer(
+                one_body_energy=energy,
+                original_pyrosetta_index=rot_index,
+                residue=rotamer_res
+            )
+            top_n_tracked.append(tracked_rotamer)
+
+        rotamer_library[seqpos] = top_n_tracked
         
     return rotamer_library, ig, rot_sets, scorefxn
 

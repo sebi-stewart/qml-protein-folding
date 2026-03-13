@@ -3,8 +3,10 @@ import pennylane as qml
 from pyrosetta.rosetta.core.pack.rotamer_set import RotamerSets
 from pyrosetta.rosetta.core.pack.interaction_graph import InteractionGraphFactory
 
+from rotamer_extraction import TrackedRotamer
 
-def extract_hamiltonian_tensors(rotamer_library: dict, ig: InteractionGraphFactory, rot_sets: RotamerSets):
+
+def extract_hamiltonian_tensors(rotamer_library: dict[int, list[TrackedRotamer]], ig: InteractionGraphFactory, rot_sets: RotamerSets):
     """
     Extracts the linear (one-body) and quadratic (two-body) energy tensors.
     """
@@ -17,7 +19,7 @@ def extract_hamiltonian_tensors(rotamer_library: dict, ig: InteractionGraphFacto
     
     # 1. Store linear terms (One-body energies)
     for i in seq_positions:
-        h_linear[i] = {idx: data[0] for idx, data in enumerate(rotamer_library[i])}
+        h_linear[i] = {idx: tracked_rotamer.one_body_energy for idx, tracked_rotamer in enumerate(rotamer_library[i])}
 
     # 2. Extract quadratic terms (Two-body energies)
     # Iterate over all unique pairs of residues
@@ -34,13 +36,14 @@ def extract_hamiltonian_tensors(rotamer_library: dict, ig: InteractionGraphFacto
         # and create an interaction graph between all their possible rotamer conformations
         interaction_matrix = {}
 
-        for q_idx_i, rot_lib_entry_i in enumerate(rotamer_library[seq_i]):
-            for q_idx_j, rot_lib_entry_j in enumerate(rotamer_library[seq_j]):
-                rot_index_i = rot_lib_entry_i[1]  # Pyrosetta rotamer index
-                rot_index_j = rot_lib_entry_j[1]
+        for q_idx_i, rotamer_library_i in enumerate(rotamer_library[seq_i]):
+            for q_idx_j, rotamer_library_j in enumerate(rotamer_library[seq_j]):
 
                 # Query the C++ backend for the pairwise energy
-                pair_energy = edge.get_two_body_energy(rot_index_i, rot_index_j)
+                pair_energy = edge.get_two_body_energy(
+                    rotamer_library_i.original_pyrosetta_index,
+                    rotamer_library_j.original_pyrosetta_index
+                )
 
                 # Store mapping: (qubit_offset_i, qubit_offset_j) -> Energy
                 interaction_matrix[(q_idx_i, q_idx_j)] = pair_energy

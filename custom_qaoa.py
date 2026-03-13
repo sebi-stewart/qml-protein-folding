@@ -16,9 +16,8 @@ def qaoa_func_generator(H_ising, mixer_layer, generator_params):
         mixer_layer(beta, wire_offsets, seq_positions, rotamer_counts)
 
 
-    @qml.qnode(dev)
+    @qml.qnode(dev, diff_method="adjoint")
     def cost_function(params):
-        # params is a 2D array of shape (2, p) where p is the number of QAOA layers
         gammas = params[0]
         betas = params[1]
 
@@ -36,12 +35,15 @@ def qaoa_func_generator(H_ising, mixer_layer, generator_params):
 
     @qml.qnode(dev)
     def sample_function(params):
+        gammas = params[0]
+        betas = params[1]
+
         for seq in seq_positions:
             base_wire = wire_offsets[seq]
             qml.PauliX(wires=base_wire)
 
-        for i in range(len(params[0])):
-            qaoa_layer(params[0][i], params[1][i])
+        for i in range(len(gammas)):
+            qaoa_layer(gammas[i], betas[i])
 
         return qml.probs(wires=range(num_qubits))
 

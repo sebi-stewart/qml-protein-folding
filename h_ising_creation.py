@@ -83,7 +83,7 @@ def reduce_hamiltonian(h_linear, J_quadratic, rotamer_library):
     return h_flex, J_flex, global_offset
 
 
-def build_ising_hamiltonian(h_flex, J_flex, global_offset, penalty=500.0) -> qml.Hamiltonian:
+def build_ising_hamiltonian(h_flex, J_flex, global_offset) -> qml.Hamiltonian:
     """
     Compiles the reduced classical PyRosetta tensors into a PennyLane Pauli-Z Hamiltonian,
     incorporating the background thermodynamic offset.
@@ -103,20 +103,14 @@ def build_ising_hamiltonian(h_flex, J_flex, global_offset, penalty=500.0) -> qml
     w_linear = {k: 0.0 for k in range(num_qubits)}
     W_quadratic = {(k, l): 0.0 for k in range(num_qubits) for l in range(num_qubits) if k < l}
 
-    # 1.1 Populate unified weights - Biological Terms for Linear + Penalty (both)
+    # 1.1 Populate unified weights - Biological Terms for Linear
     for seq in seq_positions:
         rotamers_in_cur_res = len(h_flex[seq])
         base_wire = wire_offsets[seq]
 
         for rot in range(rotamers_in_cur_res):
             k = base_wire + rot
-            # Subtract the penalty to the linear term to discourage the VQE from picking 0 rotamers
-            w_linear[k] = h_flex[seq][rot] - penalty
-
-            # Intra-residue penalty
-            for rot_other in range(rot + 1, rotamers_in_cur_res):
-                l = base_wire + rot_other
-                W_quadratic[(k, l)] = 2.0 * penalty
+            w_linear[k] = h_flex[seq][rot]
 
     # 1.2 Populate unified weights - Biological terms for quadratic term
     for (seq_i, seq_j), interactions in J_flex.items():
@@ -142,8 +136,8 @@ def build_ising_hamiltonian(h_flex, J_flex, global_offset, penalty=500.0) -> qml
     # This acts as an optimisation
 
     # 2. Add the Classical Global Offset to the Identity Term
-    # C_id = Offset + (N * lambda) + sum(w_k / 2) + sum(W_kl / 4)
-    C_id = global_offset + (num_residues * penalty) + (sum(w_linear.values()) / 2.0) + (sum(W_quadratic.values()) / 4.0)
+    # C_id = Offset + sum(w_k / 2) + sum(W_kl / 4)
+    C_id = global_offset + (sum(w_linear.values()) / 2.0) + (sum(W_quadratic.values()) / 4.0)
 
     near_zero_value = lambda x: abs(x) < 1e-6 # helper function to avoid extra computation by near zero values aka. rounding issues
 

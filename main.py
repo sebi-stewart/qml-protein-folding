@@ -30,7 +30,7 @@ if __name__ == '__main__':
         print("\n---------------------------------------\n")
 
     # Generate the actual observable and running functions we will use in the QAOA Algorithm
-    H_ising = build_ising_hamiltonian(h_flex_linear, J_flex_quadratic, global_offset, penalty=0.0)
+    H_ising = build_ising_hamiltonian(h_flex_linear, J_flex_quadratic, global_offset)
     cost_function, sample_function = qaoa_func_generator(H_ising, custom_xy_mixer_layer, generator_params)
 
     # Run the Quantum Approximate Optimisation Algorithm and sample the final parameters

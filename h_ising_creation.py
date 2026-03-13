@@ -15,6 +15,7 @@ def extract_hamiltonian_tensors(rotamer_library: dict[int, list[TrackedRotamer]]
     
     # Map sequence positions to their moltenres_id
     seq_to_molten = {rot_sets.moltenres_2_resid(m): m for m in range(1, rot_sets.nmoltenres() + 1)}
+    print(seq_to_molten)
     seq_positions = list(rotamer_library.keys())
     
     # 1. Store linear terms (One-body energies)

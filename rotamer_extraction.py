@@ -74,6 +74,7 @@ def extract_top_n_rotamers(pose, n=4) -> Tuple[Dict[int, List[TrackedRotamer]], 
     print("Iterating through molten residues - determining the top rotamer positions for each amino acid")
     for moltenres_id in range(1, rot_sets.nmoltenres() + 1):
         seqpos = rot_sets.moltenres_2_resid(moltenres_id)
+        assert seqpos == moltenres_id, f"{seqpos} != {moltenres_id}"
         print(seqpos, moltenres_id)
 
         # Get all rotamers for the chosen residue

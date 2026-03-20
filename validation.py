@@ -1,4 +1,16 @@
-def validate_conformations(conformations, probabilities, params):
+from dataclasses import dataclass
+import numpy as np
+from typing import List
+
+@dataclass
+class Conformation:
+    bitstring: list[int]
+    probability: np.float64
+    quantum_energy: np.float64
+    biological_energy: np.float64
+    pose: object
+
+def validate_conformations(conformations, probabilities, params) -> List[Conformation]:
     num_qubits = params["num_qubits"]
     wire_offsets = params['wire_offsets']
     seq_positions = params['seq_positions']
@@ -29,13 +41,12 @@ def validate_conformations(conformations, probabilities, params):
                 break  # Fails the penalty constraint
 
         if is_valid:
-            valid_conformations.append({
-                "bitstring": bitstring,
-                "probability": probabilities[idx],
-                "quantum_energy": None,
-                "biological_energy": None,
-                "pose": None,
-            })
+            valid_conformations.append(
+                Conformation(bitstring,
+                             probabilities[idx],
+                             None, None, None
+                             )
+            )
     print(wire_offsets)
     if not valid_conformations:
         raise ValueError(

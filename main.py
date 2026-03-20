@@ -2,7 +2,7 @@ import pyrosetta
 import numpy as np
 
 from benchmark import bpti_ryfyn_benchmark
-from energy_calculation import evaluate_quantum_energies, evaluate_pyrosetta_energies, compare_energies
+from energy_calculation import calculate_and_compare_energies
 from misc import init_generator_params
 from rotamer_extraction import extract_top_n_rotamers
 from h_ising_creation import extract_hamiltonian_tensors, build_ising_hamiltonian, reduce_hamiltonian
@@ -42,6 +42,7 @@ if __name__ == '__main__':
     valid_conformations = validate_conformations(top_indices, probabilities, generator_params)
 
     # Calculate both the quantum and pyrosetta energies for comparison
-    evaluate_quantum_energies(valid_conformations, h_flex_linear, J_flex_quadratic, global_offset, params=generator_params)
-    evaluate_pyrosetta_energies()
-    compare_energies()
+    calculate_and_compare_energies(valid_conformations,
+                                   h_flex_linear, J_flex_quadratic, global_offset,
+                                   benchmark_pose, scorefxn, rotamer_lib,
+                                   generator_params)

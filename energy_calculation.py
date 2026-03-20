@@ -6,21 +6,25 @@ from validation import Conformation
 
 def evaluate_quantum_energies(valid_conformations: List[Conformation], h_flex, J_flex, global_offset, params):
     wire_offsets = params["wire_offsets"]
+    rotamer_counts = params["rotamer_counts"]
 
     for conformation in valid_conformations:
-        energy = evaluate_singular_quantum_energy(conformation, h_flex, J_flex, global_offset, wire_offsets)
+        energy = evaluate_singular_quantum_energy(conformation, h_flex, J_flex, global_offset, wire_offsets, rotamer_counts)
         conformation.quantum_energy = energy
 
-def evaluate_singular_quantum_energy(conformation, h_flex, J_flex, global_offset, wire_offsets) -> np.float64:
+def evaluate_singular_quantum_energy(conformation, h_flex, J_flex, global_offset, wire_offsets, rotamer_counts) -> np.float64:
     bitstring = conformation.bitstring
     current_energy = np.float64(global_offset)
 
     # One body energies
     for seq, energies in h_flex.items():
         base_wire = wire_offsets[seq]
-        for rot, e_val in energies.items():
-            if bitstring[base_wire + rot] == 1:
-                current_energy += e_val
+        num_rots = rotamer_counts[seq]
+
+        residue_bits = bitstring[base_wire : base_wire + num_rots]
+        local_rotamer_idx = residue_bits.index(1)
+
+        current_energy += energies[local_rotamer_idx]
 
     # Two body energies
     for (seq_i, seq_j), interactions in J_flex.items():

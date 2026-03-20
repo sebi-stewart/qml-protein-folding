@@ -35,7 +35,6 @@ def get_score_function():
     scorefxn.set_weight(pyrosetta.rosetta.core.scoring.fa_atr , 1.0)
     scorefxn.set_weight(pyrosetta.rosetta.core.scoring.fa_rep, 1.0)
 
-
     return scorefxn
 
 
@@ -61,21 +60,17 @@ def extract_top_n_rotamers(pose, n=4) -> Tuple[Dict[int, List[TrackedRotamer]], 
     packer_neighbour_graph = create_packer_graph(pose, scorefxn, task)
 
     rot_sets = RotamerSets()
-    pyrosetta.rosetta.core.io.pdb.dump_pdb(pose, "pose-pre-packing.pdb")
     pack_rotamers_setup(pose, scorefxn, task, rot_sets)
-    pyrosetta.rosetta.core.io.pdb.dump_pdb(pose, "pose-post-packing.pdb")
 
     print("Computing One-Body and Two-Body Energies")
     ig = InteractionGraphFactory.create_and_initialize_two_body_interaction_graph(
         task, rot_sets, pose, scorefxn, packer_neighbour_graph
     )
-    pyrosetta.rosetta.core.io.pdb.dump_pdb(pose, "pose-post-ig.pdb")
 
     print("Iterating through molten residues - determining the top rotamer positions for each amino acid")
     for moltenres_id in range(1, rot_sets.nmoltenres() + 1):
         seqpos = rot_sets.moltenres_2_resid(moltenres_id)
         assert seqpos == moltenres_id, f"{seqpos} != {moltenres_id}"
-        print(seqpos, moltenres_id)
 
         # Get all rotamers for the chosen residue
         n_rots = rot_sets.rotamer_set_for_moltenresidue(moltenres_id).num_rotamers()

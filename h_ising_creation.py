@@ -1,49 +1,48 @@
 import itertools
 import pennylane as qml
-from pyrosetta.rosetta.core.pack.rotamer_set import RotamerSets
 from pyrosetta.rosetta.core.pack.interaction_graph import InteractionGraphFactory
 
-from rotamer_extraction import TrackedRotamer
+from rotamer_extraction import TrackedResidue
 
 
-def extract_hamiltonian_tensors(rotamer_library: dict[int, list[TrackedRotamer]], ig: InteractionGraphFactory, rot_sets: RotamerSets):
+def extract_hamiltonian_tensors(residue_library: dict[int, TrackedResidue], ig: InteractionGraphFactory):
     """
     Extracts the linear (one-body) and quadratic (two-body) energy tensors.
     """
     h_linear = {}
     J_quadratic = {}
-    
+
     # Map sequence positions to their moltenres_id
-    seq_to_molten = {rot_sets.moltenres_2_resid(m): m for m in range(1, rot_sets.nmoltenres() + 1)}
-    print(seq_to_molten)
-    seq_positions = list(rotamer_library.keys())
-    
+    seq_positions = list(residue_library.keys())
+
     # 1. Store linear terms (One-body energies)
     for i in seq_positions:
-        h_linear[i] = {idx: tracked_rotamer.one_body_energy for idx, tracked_rotamer in enumerate(rotamer_library[i])}
+        tracked_res = residue_library[i]
+        h_linear[i] = {idx: tracked_rotamer.one_body_energy for idx, tracked_rotamer in enumerate(tracked_res.rotamers)}
 
     # 2. Extract quadratic terms (Two-body energies)
     # Iterate over all unique pairs of residues
     for seq_i, seq_j in itertools.combinations(seq_positions, 2):
+        res_i = residue_library[seq_i]
+        res_j = residue_library[seq_j]
 
-        molten_i = seq_to_molten[seq_i]
-        molten_j = seq_to_molten[seq_j]
+        molten_i = res_i.moltenres_idx
+        molten_j = res_j.moltenres_idx
 
         # Check if an edge exists in the Interaction Graph
         if not ig.get_edge_exists(molten_i, molten_j): continue
         edge = ig.find_edge(molten_i, molten_j)
-        
+
         # Iterate through the top rotamers of residues i,j
         # and create an interaction graph between all their possible rotamer conformations
         interaction_matrix = {}
 
-        for q_idx_i, rotamer_library_i in enumerate(rotamer_library[seq_i]):
-            for q_idx_j, rotamer_library_j in enumerate(rotamer_library[seq_j]):
-
+        for q_idx_i, rotamer_i in enumerate(res_i.rotamers):
+            for q_idx_j, rotamer_j in enumerate(res_j.rotamers):
                 # Query the C++ backend for the pairwise energy
                 pair_energy = edge.get_two_body_energy(
-                    rotamer_library_i.original_pyrosetta_index,
-                    rotamer_library_j.original_pyrosetta_index
+                    rotamer_i.original_pyrosetta_index,
+                    rotamer_j.original_pyrosetta_index
                 )
 
                 # Store mapping: (qubit_offset_i, qubit_offset_j) -> Energy
@@ -54,9 +53,13 @@ def extract_hamiltonian_tensors(rotamer_library: dict[int, list[TrackedRotamer]]
 
     return h_linear, J_quadratic
 
-def reduce_hamiltonian(h_linear, J_quadratic, rotamer_library):
-    fixed_res = [res for res, rots in rotamer_library.items() if len(rots) == 1]
-    flex_res = [res for res, rots in rotamer_library.items() if len(rots) > 1]
+def reduce_hamiltonian(
+        h_linear: dict[int, dict[int, float]],
+        J_quadratic: dict[tuple[int, int], dict[tuple[int, int], float]],
+        residue_library: dict[int, TrackedResidue]):
+
+    fixed_res = [idx for idx, res in residue_library.items() if len(res.rotamers) == 1]
+    flex_res = [idx for idx, res in residue_library.items() if len(res.rotamers) > 1]
 
     # 1. Initialize new dictionaries for the quantum-ready flexible residues
     h_flex = {res: h_linear[res].copy() for res in flex_res}
@@ -72,7 +75,8 @@ def reduce_hamiltonian(h_linear, J_quadratic, rotamer_library):
 
     # 3. Absorb Fixed-to-Flexible interactions into Flexible Linear Terms
     for v in flex_res:
-        for rot_v in range(len(rotamer_library[v])):
+        res = residue_library[v]
+        for rot_v in range(len(res.rotamers)):
             for f in fixed_res:
                 edge = (min(v, f), max(v, f))
                 if edge in J_quadratic:

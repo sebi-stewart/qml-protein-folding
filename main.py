@@ -30,7 +30,7 @@ if __name__ == '__main__':
     cost_function, sample_function = qaoa_func_generator(H_ising, custom_xy_mixer_layer, basic_params)
 
     # Run the Quantum Approximate Optimisation Algorithm and sample the final parameters
-    final_params = run_qaoa(cost_function)
+    final_params = run_qaoa(cost_function, qaoa_params)
     probabilities = sample_function(final_params)
 
     # Extract the top 100 most probably conformations and check that exactly 1 rotamer for each residue is selected

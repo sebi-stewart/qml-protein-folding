@@ -82,24 +82,40 @@ def evaluate_singular_pyrosetta_energy(conformation: Conformation, pose,
     return new_pose
 
 def compare_energies(valid_conformations: List[Conformation]):
-    errors = []
+    deltas = []
     for conf in valid_conformations:
         assert None not in (conf, conf.quantum_energy, conf.biological_energy, conf.pose), f"Some item in the conformation class is None {conf}"
 
-        diff = abs(conf.quantum_energy - conf.biological_energy)
-        if diff > 1e-02:
-            print(f"The difference was too large to ignore for conformation {(abs(diff))}: {conf}")
-            errors.append(diff)
-            # raise AssertionError(f"The difference was too large to ignore for conformation: {conf}")
-        elif diff > 1e-05:
-            print(f"The difference wasn't significant, however still over 1e-05 ({abs(diff)}): {conf}")
-    print(errors)
+        delta = conf.quantum_energy - conf.biological_energy
+        deltas.append(delta)
+    print("Value Deltas:", np.mean(deltas), np.std(deltas))
+
+
+    # Check the pyrosetta and QUBO oderings match
+    energies = [{"quantum_energy": conf.quantum_energy, "biological_energy": conf.biological_energy,
+                 'quant_idx': -1, 'bio_idx': -1} for conf in valid_conformations]
+
+    energies.sort(key=lambda x: x['quantum_energy'])
+    for i, eng in enumerate(energies):
+        eng['quant_idx'] = i
+
+    energies.sort(key=lambda x: x['biological_energy'])
+    for i, eng in enumerate(energies):
+        eng['bio_idx'] = i
+
+    rank_match = [abs(conf['quant_idx'] - conf['bio_idx']) for idx, conf in enumerate(energies)]
+    if not all(match == 0 for match in rank_match):
+        raise AssertionError(f"Not all ranks matched, {rank_match}")
+
+    if np.std(deltas) > 0.1:
+        raise AssertionError(f"Deltas std deviation was too high: {np.std(deltas)}")
+
 
 def calculate_and_compare_energies(valid_conformations: List[Conformation],
                                    h_flex, J_flex, global_offset,
                                    original_pose, scorefxn, residue_library: dict[int, TrackedResidue],
                                    params: BasicParams):
-    print("==================== ENERGY OPERATIONS ====================")
+    print("\n==================== ENERGY OPERATIONS ====================")
     print(f"Calculating Quantum Energies for all {len(valid_conformations)} conformations")
     evaluate_quantum_energies(valid_conformations, h_flex, J_flex, global_offset, params)
 
@@ -109,7 +125,7 @@ def calculate_and_compare_energies(valid_conformations: List[Conformation],
     print(f"Comparing both energy types for all {len(valid_conformations)} conformations ")
     compare_energies(valid_conformations)
 
-    print("==================== ENERGY OPERATIONS COMPLETE ====================")
+    print("==================== ENERGY OPERATIONS COMPLETE ====================\n")
 
 
 def print_match_scores(valid_conformations):

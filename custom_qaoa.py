@@ -58,6 +58,7 @@ def run_qaoa(cost_function, qaoa_params: QAOAParams):
     opt = qml.AdamOptimizer(stepsize=qaoa_params.optimiser_stepsize)
     current_params = initial_params
 
+    print("\n==================== QAOA Run ====================")
     print(f"Commencing QAOA Optimization [p={qaoa_params.layers}]...")
     for epoch in range(qaoa_params.epochs):
         current_params, cost = opt.step_and_cost(cost_function, current_params)
@@ -65,4 +66,6 @@ def run_qaoa(cost_function, qaoa_params: QAOAParams):
             print(f"Epoch {epoch:3d} | Cost: {cost:.4f}")
 
     print("Optimization converged.")
+    print("==================== QAOA Run COMPLETE ====================\n")
+
     return current_params

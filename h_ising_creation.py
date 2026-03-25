@@ -183,4 +183,4 @@ def build_ising_hamiltonian(h_flex, J_flex) -> tuple[qml.Hamiltonian, int]:
         observables.append(qml.PauliZ(wires=k) @ qml.PauliZ(wires=l))
 
     print(f"Reduced Hamiltonian built: {num_qubits} Qubits, {len(coeffs)} Pauli strings.")
-    return qml.dot(coeffs, observables), len(coeffs)
+    return qml.dot(coeffs, observables), num_qubits

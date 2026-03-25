@@ -11,14 +11,37 @@ df_dir = "overnight_results"
 # df_file = "run_5_ring_mixer"
 
 large_runs = [
+    # 5 residues long
     LargeRunConfig(19, 23, 4),
     LargeRunConfig(19, 23, 5),
     LargeRunConfig(20, 24, 4),
     LargeRunConfig(20, 24, 5),
     LargeRunConfig(21, 25, 4),
     LargeRunConfig(21, 25, 5),
+
+    # 6 Residues Long
+    LargeRunConfig(19, 24, 4),
+    LargeRunConfig(19, 24, 5),
     LargeRunConfig(20, 25, 4),
-    LargeRunConfig(19, 24, 4)
+    LargeRunConfig(20, 25, 5),
+    LargeRunConfig(21, 26, 4),
+    LargeRunConfig(21, 26, 5),
+
+    # 7 Residues Long
+    LargeRunConfig(18, 24, 4),
+    LargeRunConfig(18, 24, 5),
+    LargeRunConfig(19, 25, 4),
+    LargeRunConfig(19, 25, 5),
+    LargeRunConfig(20, 26, 4),
+    LargeRunConfig(20, 26, 5),
+
+    # 8 Residues Long
+    LargeRunConfig(17, 24, 4),
+    LargeRunConfig(17, 24, 5),
+    LargeRunConfig(18, 25, 4),
+    LargeRunConfig(18, 25, 5),
+    LargeRunConfig(20, 27, 4),
+    LargeRunConfig(20, 27, 5),
 ]
 
 

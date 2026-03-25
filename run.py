@@ -89,7 +89,7 @@ def run_one_residue_combo(large_run_config: LargeRunConfig, benchmark_pose: Pose
         print("Hamiltonian Will Exceed Memory Available, skipping")
         return
 
-    p_runs = [1, 2, 3, 4, 8, 12, 16]
+    p_runs = [1, 2, 3, 4, 8, 12]
     seed_versions = list(range(30))
 
     run_configs = [

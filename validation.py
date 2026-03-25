@@ -2,19 +2,22 @@ from dataclasses import dataclass
 import numpy as np
 from typing import List
 
+from misc import BasicParams
+
+
 @dataclass
 class Conformation:
     bitstring: list[int]
     probability: np.float64
-    quantum_energy: np.float64
-    biological_energy: np.float64
+    quantum_energy: np.float64 | None
+    biological_energy: np.float64 | None
     pose: object
 
-def validate_conformations(conformations, probabilities, params) -> List[Conformation]:
-    num_qubits = params["num_qubits"]
-    wire_offsets = params['wire_offsets']
-    seq_positions = params['seq_positions']
-    rotamer_counts = params['rotamer_counts']
+def validate_conformations(conformations, probabilities, params: BasicParams) -> List[Conformation]:
+    num_qubits = params.num_qubits
+    wire_offsets = params.wire_offsets
+    seq_positions = params.seq_positions
+    rotamer_counts = params.rotamer_counts
 
     valid_conformations = []
 

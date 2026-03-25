@@ -2,13 +2,14 @@ import itertools
 import numpy as np
 from typing import List
 
+from misc import BasicParams
 from rotamer_extraction import TrackedResidue
 from validation import Conformation
 
 
-def evaluate_quantum_energies(valid_conformations: List[Conformation], h_flex, J_flex, global_offset, params):
-    wire_offsets = params["wire_offsets"]
-    rotamer_counts = params["rotamer_counts"]
+def evaluate_quantum_energies(valid_conformations: List[Conformation], h_flex, J_flex, global_offset, params: BasicParams):
+    wire_offsets = params.wire_offsets
+    rotamer_counts = params.rotamer_counts
 
     for conformation in valid_conformations:
         energy = evaluate_singular_quantum_energy(conformation, h_flex, J_flex, global_offset, wire_offsets, rotamer_counts)
@@ -40,7 +41,7 @@ def evaluate_singular_quantum_energy(conformation, h_flex, J_flex, global_offset
 
 def evaluate_pyrosetta_energies(valid_conformations: List[Conformation],
                                 original_pose, scorefxn,
-                                residue_library: dict[int, TrackedResidue], params):
+                                residue_library: dict[int, TrackedResidue], params: BasicParams):
     for conformation in valid_conformations:
         new_pose = evaluate_singular_pyrosetta_energy(conformation, original_pose, residue_library, params)
 
@@ -48,12 +49,12 @@ def evaluate_pyrosetta_energies(valid_conformations: List[Conformation],
         conformation.biological_energy = np.float64(scorefxn(new_pose))
 
 def evaluate_singular_pyrosetta_energy(conformation: Conformation, pose,
-                                       residue_library: dict[int, TrackedResidue], params):
+                                       residue_library: dict[int, TrackedResidue], params: BasicParams):
     new_pose = pose.clone()
 
-    seq_positions = params["seq_positions"]
-    wire_offsets = params["wire_offsets"]
-    rotamer_counts = params["rotamer_counts"]
+    seq_positions = params.seq_positions
+    wire_offsets = params.wire_offsets
+    rotamer_counts = params.rotamer_counts
 
     #Flexible rotamers
     for seq in seq_positions:
@@ -94,7 +95,10 @@ def compare_energies(valid_conformations: List[Conformation]):
             print(f"The difference wasn't significant, however still over 1e-05 ({abs(diff)}): {conf}")
     print(errors)
 
-def calculate_and_compare_energies(valid_conformations: List[Conformation], h_flex, J_flex, global_offset, original_pose, scorefxn, residue_library: dict[int, TrackedResidue], params):
+def calculate_and_compare_energies(valid_conformations: List[Conformation],
+                                   h_flex, J_flex, global_offset,
+                                   original_pose, scorefxn, residue_library: dict[int, TrackedResidue],
+                                   params: BasicParams):
     print("==================== ENERGY OPERATIONS ====================")
     print(f"Calculating Quantum Energies for all {len(valid_conformations)} conformations")
     evaluate_quantum_energies(valid_conformations, h_flex, J_flex, global_offset, params)

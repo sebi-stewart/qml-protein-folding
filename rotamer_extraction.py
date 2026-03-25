@@ -28,7 +28,7 @@ def extract_top_n_rotamers(pose: pyrosetta.Pose, n=4, active_start=20, active_en
     """
     Extracts the top N lowest-energy rotamers for each packable residue using a precomputed Interaction Graph.
     """
-    rotamer_library = {}
+    residue_library = {}
 
     # fa --> full atom
     # scorefxn --> Score function
@@ -83,9 +83,9 @@ def extract_top_n_rotamers(pose: pyrosetta.Pose, n=4, active_start=20, active_en
             )
             top_n_rotamers.append(tracked_rotamer)
 
-        rotamer_library[seqpos] = TrackedResidue(moltenres_id, seqpos, top_n_rotamers)
+        residue_library[seqpos] = TrackedResidue(moltenres_id, seqpos, top_n_rotamers)
 
-    return rotamer_library, ig, rot_sets, scorefxn
+    return residue_library, ig, rot_sets, scorefxn
 
 
 def create_packing_task(pose, active_start, active_end):

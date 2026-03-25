@@ -1,15 +1,16 @@
 import pennylane as qml
-from constants import *
 import pennylane.numpy as np
+from misc import QAOAParams, BasicParams
+from constants import IS_LINUX
 
-def qaoa_func_generator(H_ising, mixer_layer, generator_params):
-    num_qubits = generator_params["num_qubits"]
-    wire_offsets = generator_params['wire_offsets']
-    seq_positions = generator_params['seq_positions']
-    rotamer_counts = generator_params['rotamer_counts']
-    use_gpu = generator_params["use_gpu"]
 
-    dev = qml.device('lightning.gpu' if use_gpu else 'lightning.qubit', wires=range(num_qubits))
+def qaoa_func_generator(H_ising, mixer_layer, generator_params: BasicParams):
+    num_qubits = generator_params.num_qubits
+    wire_offsets = generator_params.wire_offsets
+    seq_positions = generator_params.seq_positions
+    rotamer_counts = generator_params.rotamer_counts
+
+    dev = qml.device('lightning.gpu' if IS_LINUX else 'lightning.qubit', wires=range(num_qubits))
 
     def qaoa_layer(gamma, beta):
         qml.qaoa.cost_layer(gamma, H_ising)
@@ -49,18 +50,16 @@ def qaoa_func_generator(H_ising, mixer_layer, generator_params):
 
     return cost_function, sample_function
 
-def run_qaoa(cost_function):
-    p = QAOA_LAYERS
-    np.random.seed(RAND_SEED)
+def run_qaoa(cost_function, qaoa_params: QAOAParams):
+    np.random.seed(qaoa_params.seed)
     # Initialize parameters close to zero to avoid barren plateaus
-    initial_params = np.random.uniform(low=-0.01, high=0.01, size=(2, p), requires_grad=True)
+    initial_params = np.random.uniform(low=-0.01, high=0.01, size=(2, qaoa_params.layers), requires_grad=True)
 
-    opt = qml.AdamOptimizer(stepsize=OPTIMISER_STEPSIZE)
-    epochs = OPTIMISER_EPOCHS
+    opt = qml.AdamOptimizer(stepsize=qaoa_params.optimiser_stepsize)
     current_params = initial_params
 
-    print(f"Commencing QAOA Optimization [p={p}]...")
-    for epoch in range(epochs):
+    print(f"Commencing QAOA Optimization [p={qaoa_params.layers}]...")
+    for epoch in range(qaoa_params.epochs):
         current_params, cost = opt.step_and_cost(cost_function, current_params)
         if epoch % 10 == 0:
             print(f"Epoch {epoch:3d} | Cost: {cost:.4f}")

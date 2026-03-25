@@ -1,7 +1,15 @@
-from constants import IS_LINUX
+from constants import *
+from dataclasses import dataclass
 
-def init_generator_params(h_flex_linear):
-    print("initializing generator_params")
+@dataclass
+class BasicParams:
+    wire_offsets: dict
+    seq_positions: list[int]
+    rotamer_counts: dict
+    num_qubits: int
+
+def init_basic_params(h_flex_linear) -> BasicParams:
+    print("initializing basic params")
 
     seq_positions = sorted(list(h_flex_linear.keys()))
     wire_offsets = {}
@@ -14,13 +22,24 @@ def init_generator_params(h_flex_linear):
 
     num_qubits = sum(rotamer_counts.values())
 
+    return BasicParams(
+        wire_offsets,
+        seq_positions,
+        rotamer_counts,
+        num_qubits
+    )
 
-    generator_params = {
-        "wire_offsets": wire_offsets,
-        "seq_positions": seq_positions,
-        "rotamer_counts": rotamer_counts,
-        "num_qubits": num_qubits,
-        "use_gpu": IS_LINUX,
-    }
+@dataclass
+class QAOAParams:
+    layers: int
+    seed: int
+    optimiser_stepsize: float
+    epochs: int
 
-    return generator_params
+def default_qaoa_params() -> QAOAParams:
+    return QAOAParams(
+        QAOA_LAYERS,
+        RAND_SEED,
+        OPTIMISER_STEPSIZE,
+        OPTIMISER_EPOCHS
+    )

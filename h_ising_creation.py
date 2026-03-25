@@ -69,19 +69,22 @@ def reduce_hamiltonian(
     for f in fixed_res:
         global_offset += h_linear[f][0]
         for f2 in fixed_res:
-            if f < f2 or (f, f2) not in J_quadratic:
-                continue
-            global_offset += J_quadratic[(f, f2)][(0, 0)]
+            if f >= f2: continue
+            edge = (f, f2)
+            if edge not in J_quadratic: continue
+
+            global_offset += J_quadratic[edge][(0, 0)]
 
     # 3. Absorb Fixed-to-Flexible interactions into Flexible Linear Terms
     for v in flex_res:
-        res = residue_library[v]
-        for rot_v in range(len(res.rotamers)):
-            for f in fixed_res:
-                edge = (min(v, f), max(v, f))
-                if edge in J_quadratic:
-                    idx = (rot_v, 0) if v < f else (0, rot_v)
-                    h_flex[v][rot_v] += J_quadratic[edge][idx]
+        for f in fixed_res:
+            edge = (min(v, f), max(v, f))
+            if edge not in J_quadratic: continue
+
+            flex_res_entry = residue_library[v]
+            for rot_v in range(len(flex_res_entry.rotamers)):
+                rot_edge = (rot_v, 0) if v < f else (0, rot_v)
+                h_flex[v][rot_v] += J_quadratic[edge][rot_edge]
 
     # 4. Retain only Flexible-to-Flexible interactions
     for (i, j), interactions in J_quadratic.items():
@@ -90,8 +93,13 @@ def reduce_hamiltonian(
 
     return h_flex, J_flex, global_offset
 
+def extract_and_reduce_tensors(residue_library: dict[int, TrackedResidue], ig: InteractionGraphFactory):
+    h_linear, J_quadratic = extract_hamiltonian_tensors(residue_library, ig)
+    h_flex_linear, J_flex_quadratic, global_offset = reduce_hamiltonian(h_linear, J_quadratic, residue_library)
+    return h_flex_linear, J_flex_quadratic, global_offset
 
-def build_ising_hamiltonian(h_flex, J_flex, global_offset) -> qml.Hamiltonian:
+
+def build_ising_hamiltonian(h_flex, J_flex) -> qml.Hamiltonian:
     """
     Compiles the reduced classical PyRosetta tensors into a PennyLane Pauli-Z Hamiltonian,
     incorporating the background thermodynamic offset.
@@ -145,7 +153,7 @@ def build_ising_hamiltonian(h_flex, J_flex, global_offset) -> qml.Hamiltonian:
 
     # 2. Add the Classical Global Offset to the Identity Term
     # C_id = Offset + sum(w_k / 2) + sum(W_kl / 4)
-    C_id = global_offset + (sum(w_linear.values()) / 2.0) + (sum(W_quadratic.values()) / 4.0)
+    C_id = (sum(w_linear.values()) / 2.0) + (sum(W_quadratic.values()) / 4.0)
 
     near_zero_value = lambda x: abs(x) < 1e-6 # helper function to avoid extra computation by near zero values aka. rounding issues
 

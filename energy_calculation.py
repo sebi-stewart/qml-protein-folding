@@ -55,6 +55,7 @@ def evaluate_singular_pyrosetta_energy(conformation: Conformation, pose,
     wire_offsets = params["wire_offsets"]
     rotamer_counts = params["rotamer_counts"]
 
+    #Flexible rotamers
     for seq in seq_positions:
         base_wire = wire_offsets[seq]
         num_rots = rotamer_counts[seq]
@@ -66,6 +67,17 @@ def evaluate_singular_pyrosetta_energy(conformation: Conformation, pose,
         rotamer_entry = res_entry.rotamers[local_rotamer_idx]
 
         new_pose.replace_residue(seq, rotamer_entry.residue, False)
+
+    # Set "fixed" rotamers
+    all_seq = [key for key in residue_library]
+    for seq in all_seq:
+        if seq in seq_positions: continue
+
+        res_entry = residue_library[seq]
+        rotamer_entry = res_entry.rotamers[0]
+
+        new_pose.replace_residue(seq, rotamer_entry.residue, False)
+
     return new_pose
 
 def compare_energies(valid_conformations: List[Conformation]):

@@ -1,5 +1,4 @@
 import pyrosetta
-import numpy as np
 
 from benchmark import full_bpti_benchmark
 from energy_calculation import calculate_and_compare_energies
@@ -10,7 +9,6 @@ from initialisation import initialize_rosetta
 from custom_qaoa import qaoa_func_generator, run_qaoa
 from h_mixer import custom_xy_mixer_layer
 
-from constants import *
 from validation import validate_conformations
 
 if __name__ == '__main__':
@@ -34,8 +32,7 @@ if __name__ == '__main__':
     probabilities = sample_function(final_params)
 
     # Extract the top 100 most probably conformations and check that exactly 1 rotamer for each residue is selected
-    top_indices = list(np.argsort(probabilities)[-TOP_CONFORMATION_COUNTS:][::-1])
-    valid_conformations = validate_conformations(top_indices, probabilities, basic_params)
+    valid_conformations = validate_conformations(probabilities, basic_params)
 
     # Calculate both the quantum and pyrosetta energies for comparison
     calculate_and_compare_energies(valid_conformations,

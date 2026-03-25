@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import numpy as np
 from typing import List
+from constants import TOP_CONFORMATION_COUNTS
 
 from misc import BasicParams
 
@@ -13,7 +14,7 @@ class Conformation:
     biological_energy: np.float64 | None
     pose: object
 
-def validate_conformations(conformations, probabilities, params: BasicParams) -> List[Conformation]:
+def validate_conformations(probabilities, params: BasicParams) -> List[Conformation]:
     num_qubits = params.num_qubits
     wire_offsets = params.wire_offsets
     seq_positions = params.seq_positions
@@ -24,9 +25,10 @@ def validate_conformations(conformations, probabilities, params: BasicParams) ->
     def int_to_bitstring(idx, length):
         return [int(x) for x in format(idx, f'0{length}b')]
 
+    top_indices = list(np.argsort(probabilities)[-TOP_CONFORMATION_COUNTS:][::-1])
 
     # 2. Enforce the One-Hot Constraint
-    for idx in conformations:
+    for idx in top_indices:
         bitstring = int_to_bitstring(idx, num_qubits)
         is_valid = True
 
@@ -55,7 +57,7 @@ def validate_conformations(conformations, probabilities, params: BasicParams) ->
         raise ValueError(
             "Zero valid conformations found in the top sampled states. You must increase QAOA depth 'p' or increase the penalty multiplier.")
 
-    print(f"Valid to Non-Valid Ration: {len(valid_conformations)} - {len(conformations) - len(valid_conformations)}")
+    print(f"Valid to Non-Valid Ration: {len(valid_conformations)} - {len(top_indices) - len(valid_conformations)}")
 
     return valid_conformations
 

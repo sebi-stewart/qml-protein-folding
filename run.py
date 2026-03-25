@@ -1,20 +1,34 @@
 from dataclasses import dataclass
+import contextlib
+import time
+import gc
 
+import pandas as pd
 import numpy as np
+import random
+
 from pyrosetta import Pose
 
 from energy_calculation import calculate_and_compare_energies
-from misc import BasicParams, QAOAParams
-from rotamer_extraction import TrackedResidue
+from rotamer_extraction import TrackedResidue, extract_top_n_rotamers
 from custom_qaoa import qaoa_func_generator, run_qaoa
 from h_mixer import custom_xy_mixer_layer, ring_xy_mixer_layer
 
 from validation import validate_conformations, Conformation
 
+from misc import init_basic_params, default_qaoa_params, BasicParams, QAOAParams
+from h_ising_creation import extract_and_reduce_tensors, build_ising_hamiltonian
+
 @dataclass
 class RunConfig:
     qaoaParams: QAOAParams
     log_file: str
+
+@dataclass
+class LargeRunConfig:
+    start: int
+    end: int
+    n: int
 
 def run(h_linear: dict[int, dict[int, float]], J_quadratic: dict, global_offset: float,
         H_ising, benchmark_pose: Pose, scorefxn: object, residue_library: dict[int, TrackedResidue],
@@ -51,3 +65,85 @@ def extract_rank_matches(valid_conformations: list[Conformation]):
         conf['quant_idx'] = i
 
     return [abs(conf['probs_idx'] - conf['quant_idx']) for _, conf in enumerate(energies)]
+
+
+def run_one_residue_combo(large_run_config: LargeRunConfig, benchmark_pose: Pose, log_prefix: str, log_dir: str, df_dir: str):
+    print(
+        "\n================================================================================================================\n")
+    print(f"====================Starting new run {large_run_config}====================")
+    residue_library, ig, rot_sets, scorefxn = extract_top_n_rotamers(benchmark_pose,
+                                                                     n=large_run_config.n,
+                                                                     active_start=large_run_config.start,
+                                                                     active_end=large_run_config.end)
+
+    df_file = f"n_{large_run_config.n}_{large_run_config.start}-{large_run_config.end}"
+
+    # Generating QUBO (Quadratic Unconstrained Binary Optimisation) Model, and then reduce it
+    h_linear, J_quadratic, global_offset = extract_and_reduce_tensors(residue_library, ig)
+    basic_params: BasicParams = init_basic_params(h_linear)
+    base_qaoa_params: QAOAParams = default_qaoa_params()
+
+    # Generate the actual observable and running functions we will use in the QAOA Algorithm
+    cost_hamiltonian, hamiltonian_size = build_ising_hamiltonian(h_linear, J_quadratic)
+    if hamiltonian_size > 22:
+        print("Hamiltonian Will Exceed Memory Available, skipping")
+        return
+
+    p_runs = [1, 2, 3, 4, 8, 12, 16]
+    seed_versions = list(range(30))
+
+    run_configs = [
+        RunConfig(
+            QAOAParams(p, base_qaoa_params.seed,
+                       base_qaoa_params.optimiser_stepsize,
+                       base_qaoa_params.epochs)
+            , f"{log_prefix}run_layers={p}_s.log") for p in p_runs
+    ]
+
+    run_records = []
+
+    for config in run_configs:
+        layers = config.qaoaParams.layers
+        print(f"===== Starting run (Layers: {layers}) - {len(seed_versions)} seeds =====")
+
+        start = time.perf_counter()
+
+        with open(f"{log_dir}/{config.log_file}", "w") as log_file:
+            with contextlib.redirect_stdout(log_file):
+                for seed in seed_versions:
+                    config.qaoaParams.seed = seed
+
+                    np.random.seed(seed)
+                    random.seed(seed)
+
+                    # Execute the quantum pipeline
+                    valid_conformations = run(
+                        h_linear, J_quadratic, global_offset,
+                        cost_hamiltonian, benchmark_pose, scorefxn, residue_library,
+                        basic_params, config.qaoaParams
+                    )
+
+                    # Extract metrics
+                    prob_rank_match = extract_rank_matches(valid_conformations)
+
+                    # SAVE RAW DATA: Append every single run as an independent record
+                    run_records.append({
+                        'layers': layers,
+                        'seed': seed,
+                        'rank_matches': prob_rank_match
+                    })
+
+                    temp_df = pd.DataFrame(run_records)
+                    temp_df.to_pickle(f"{df_dir}/{df_file}_layers_{layers}_checkpoint.pkl")
+
+                    gc.collect()
+
+        end = time.perf_counter()
+        time_taken = end - start
+        print(
+            f"===== Run Complete time taken = {time_taken:5.3f} seconds | {time_taken / len(seed_versions):5.3f} per run =====\n")
+
+    print(f"====================Large Run Complete Saving to DF====================")
+
+    final_df = pd.DataFrame(run_records)
+    final_df.to_pickle(f"{df_dir}/{df_file}_final.pkl")

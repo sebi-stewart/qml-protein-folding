@@ -6,9 +6,8 @@ from pyrosetta import Pose
 from energy_calculation import calculate_and_compare_energies
 from misc import BasicParams, QAOAParams
 from rotamer_extraction import TrackedResidue
-from h_ising_creation import build_ising_hamiltonian
 from custom_qaoa import qaoa_func_generator, run_qaoa
-from h_mixer import custom_xy_mixer_layer
+from h_mixer import custom_xy_mixer_layer, ring_xy_mixer_layer
 
 from validation import validate_conformations, Conformation
 
@@ -18,11 +17,10 @@ class RunConfig:
     log_file: str
 
 def run(h_linear: dict[int, dict[int, float]], J_quadratic: dict, global_offset: float,
-        benchmark_pose: Pose, scorefxn: object, residue_library: dict[int, TrackedResidue],
+        H_ising, benchmark_pose: Pose, scorefxn: object, residue_library: dict[int, TrackedResidue],
         basic_params: BasicParams, qaoa_params: QAOAParams) -> list[Conformation]:
-    # Generate the actual observable and running functions we will use in the QAOA Algorithm
-    H_ising = build_ising_hamiltonian(h_linear, J_quadratic)
-    cost_function, sample_function = qaoa_func_generator(H_ising, custom_xy_mixer_layer, basic_params)
+
+    cost_function, sample_function = qaoa_func_generator(H_ising, ring_xy_mixer_layer, basic_params)
 
     # Run the Quantum Approximate Optimisation Algorithm and sample the final parameters
     final_params = run_qaoa(cost_function, qaoa_params)
@@ -52,4 +50,4 @@ def extract_rank_matches(valid_conformations: list[Conformation]):
     for i, conf in enumerate(energies):
         conf['quant_idx'] = i
 
-    return [abs(conf['probs_idx'] - conf['quant_idx']) for idx, conf in enumerate(energies)]
+    return [abs(conf['probs_idx'] - conf['quant_idx']) for _, conf in enumerate(energies)]

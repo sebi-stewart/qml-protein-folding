@@ -2,19 +2,25 @@ import contextlib
 import time
 
 import pandas as pd
+import numpy as np
+import random
 import pyrosetta
 
 from benchmark import full_bpti_benchmark
 from misc import init_basic_params, default_qaoa_params, BasicParams, QAOAParams
 from rotamer_extraction import extract_top_n_rotamers
-from h_ising_creation import extract_and_reduce_tensors
+from h_ising_creation import extract_and_reduce_tensors, build_ising_hamiltonian
 from initialisation import initialize_rosetta
 from run import run, RunConfig, extract_rank_matches
 import sys
+import gc
 
 old_stdout = sys.stdout
 
 log_dir = "logs"
+log_prefix = "ring_mixer_"
+df_dir = "results"
+df_file = "run_4_ring_mixer"
 
 
 if __name__ == '__main__':
@@ -29,15 +35,18 @@ if __name__ == '__main__':
     basic_params: BasicParams = init_basic_params(h_linear)
     base_qaoa_params: QAOAParams = default_qaoa_params()
 
+    # Generate the actual observable and running functions we will use in the QAOA Algorithm
+    cost_hamiltonian, hamiltonian_size = build_ising_hamiltonian(h_linear, J_quadratic)
+
     p_runs = [1, 2, 3, 4, 8, 12, 16, 32]
-    seed_versions = [1, 2, 3, 5, 7, 42]
+    seed_versions = list(range(30))
 
     run_configs = [
         RunConfig(
             QAOAParams(p, base_qaoa_params.seed,
                        base_qaoa_params.optimiser_stepsize,
                        base_qaoa_params.epochs)
-            , f"run_layers={p}_s.log") for p in p_runs
+            , f"{log_prefix}run_layers={p}_s.log") for p in p_runs
     ]
 
     results: dict[int, list[int]] = {}
@@ -54,10 +63,13 @@ if __name__ == '__main__':
                 for seed in seed_versions:
                     config.qaoaParams.seed = seed
 
+                    np.random.seed(seed)
+                    random.seed(seed)
+
                     # Execute the quantum pipeline
                     valid_conformations = run(
                         h_linear, J_quadratic, global_offset,
-                        benchmark_pose, scorefxn, residue_library,
+                        cost_hamiltonian, benchmark_pose, scorefxn, residue_library,
                         basic_params, config.qaoaParams
                     )
 
@@ -71,6 +83,11 @@ if __name__ == '__main__':
                         'rank_matches': prob_rank_match
                     })
 
+                    temp_df = pd.DataFrame(run_records)
+                    temp_df.to_pickle(f"{df_dir}/{df_file}_layers_{layers}_checkpoint.pkl")
+
+                    gc.collect()
+
         end = time.perf_counter()
         time_taken = end - start
         print(f"===== Run Complete time taken = {time_taken:5.3f} seconds | {time_taken / len(seed_versions):5.3f} per run =====\n")
@@ -78,5 +95,5 @@ if __name__ == '__main__':
 
     print("\n\n=============== All Runs Complete Saving to DF ===============\n\n")
 
-    df = pd.DataFrame(run_records)
-    df.to_pickle("results/run2_raw.pkl")
+    final_df = pd.DataFrame(run_records)
+    final_df.to_pickle(f"{df_dir}/{df_file}_final.pkl")

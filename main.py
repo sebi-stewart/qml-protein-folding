@@ -44,6 +44,11 @@ large_runs = [
     LargeRunConfig(20, 27, 5),
 ]
 
+explorable_state_space = 0
+for large_config in large_runs:
+    explorable_state_space += (large_config.n - 1)**(large_config.end - large_config.start + 1)
+current_explored_state_space = 0
+
 
 if __name__ == '__main__':
     initialize_rosetta(pyrosetta, extra_flags="-mute all")
@@ -51,5 +56,9 @@ if __name__ == '__main__':
     # Pyrosetta Relevant Code
     benchmark_pose = full_bpti_benchmark()
 
+
     for large_config in large_runs:
         run_one_residue_combo(large_config, benchmark_pose, log_prefix, log_dir, df_dir)
+
+        current_explored_state_space += (large_config.n - 1)**(large_config.end - large_config.start + 1)
+        print(f" =============================== {current_explored_state_space/explorable_state_space:3.4f}% COMPLETE ({current_explored_state_space}/{explorable_state_space}) =============================== ")

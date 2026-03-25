@@ -44,10 +44,13 @@ def run(h_linear: dict[int, dict[int, float]], J_quadratic: dict, global_offset:
     valid_conformations = validate_conformations(probabilities, basic_params)
 
     # Calculate both the quantum and pyrosetta energies for comparison
-    calculate_and_compare_energies(valid_conformations,
-                                   h_linear, J_quadratic, global_offset,
-                                   benchmark_pose, scorefxn, residue_library,
-                                   basic_params)
+    try:
+        calculate_and_compare_energies(valid_conformations,
+                                       h_linear, J_quadratic, global_offset,
+                                       benchmark_pose, scorefxn, residue_library,
+                                       basic_params)
+    except AssertionError as e:
+        print("ERROR ERROR ERROR", e)
 
     return valid_conformations
 
@@ -77,6 +80,7 @@ def run_one_residue_combo(large_run_config: LargeRunConfig, benchmark_pose: Pose
                                                                      active_end=large_run_config.end)
 
     df_file = f"n_{large_run_config.n}_{large_run_config.start}-{large_run_config.end}"
+    log_postfix = df_file
 
     # Generating QUBO (Quadratic Unconstrained Binary Optimisation) Model, and then reduce it
     h_linear, J_quadratic, global_offset = extract_and_reduce_tensors(residue_library, ig)
@@ -89,7 +93,7 @@ def run_one_residue_combo(large_run_config: LargeRunConfig, benchmark_pose: Pose
         print("Hamiltonian Will Exceed Memory Available, skipping")
         return
 
-    p_runs = [1, 2, 3, 4, 8, 12]
+    p_runs = [1, 2, 4, 8, 12]
     seed_versions = list(range(30))
 
     run_configs = [
@@ -97,7 +101,7 @@ def run_one_residue_combo(large_run_config: LargeRunConfig, benchmark_pose: Pose
             QAOAParams(p, base_qaoa_params.seed,
                        base_qaoa_params.optimiser_stepsize,
                        base_qaoa_params.epochs)
-            , f"{log_prefix}run_layers={p}_s.log") for p in p_runs
+            , f"{log_prefix}run_layers={p}_{log_postfix}.log") for p in p_runs
     ]
 
     run_records = []

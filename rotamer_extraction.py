@@ -1,3 +1,4 @@
+import logging
 from typing import Tuple, Dict, List
 
 import pyrosetta
@@ -24,21 +25,21 @@ class TrackedResidue:
     rotamers: List[TrackedRotamer]
 
 
-def extract_top_n_rotamers(pose: pyrosetta.Pose, n=4, active_start=20, active_end=24) -> Tuple[Dict[int, TrackedResidue], InteractionGraphFactory, RotamerSets, object]:
+def extract_top_n_rotamers(pose: pyrosetta.Pose, logger: logging.Logger, n=4, active_start=20, active_end=24,) -> Tuple[Dict[int, TrackedResidue], InteractionGraphFactory, RotamerSets, object]:
     """
     Extracts the top N lowest-energy rotamers for each packable residue using a precomputed Interaction Graph.
     """
-    print("\n==================== Rotamer Energy Extraction ====================")
+    logger.info("==================== Rotamer Energy Extraction ====================")
     residue_library = {}
 
     # fa --> full atom
     # scorefxn --> Score function
     # we will modify this to only take into account hyrogen interactions and
-    print("Creating score function")
+    logger.debug("Creating score function")
     scorefxn = get_score_function()
-    pose = safe_score_pose(scorefxn, pose)
+    pose = safe_score_pose(scorefxn, pose, logger)
 
-    print("Creating Repacking Task - Core Rotamer Optimisation Protocol")
+    logger.debug("Creating Repacking Task - Core Rotamer Optimisation Protocol")
 
     task = create_packing_task(pose, active_start, active_end)
     task.or_precompute_ig(True)
@@ -52,15 +53,15 @@ def extract_top_n_rotamers(pose: pyrosetta.Pose, n=4, active_start=20, active_en
     rot_sets.build_rotamers(pose, scorefxn, packer_neighbour_graph)
     rot_sets.prepare_sets_for_packing(pose, scorefxn)
 
-    print("Computing One-Body and Two-Body Energies")
+    logger.debug("Computing One-Body and Two-Body Energies")
     ig = InteractionGraphFactory.create_and_initialize_two_body_interaction_graph(
         task, rot_sets, pose, scorefxn, packer_neighbour_graph
     )
 
-    print("Iterating through molten residues - determining the top rotamer positions for each amino acid")
+    logger.debug("Iterating through molten residues - determining the top rotamer positions for each amino acid")
     for moltenres_id in range(1, rot_sets.nmoltenres() + 1):
         seqpos = rot_sets.moltenres_2_resid(moltenres_id)
-        print(f"Moltenres ID: {moltenres_id}, SeqPos ID: {seqpos}")
+        logger.debug(f"Moltenres ID: {moltenres_id}, SeqPos ID: {seqpos}")
 
         # Get all rotamers for the chosen residue
         n_rots = rot_sets.rotamer_set_for_moltenresidue(moltenres_id).num_rotamers()
@@ -86,7 +87,7 @@ def extract_top_n_rotamers(pose: pyrosetta.Pose, n=4, active_start=20, active_en
 
         residue_library[seqpos] = TrackedResidue(moltenres_id, seqpos, top_n_rotamers)
 
-    print("==================== Rotamer Energy Extraction Complete ====================\n")
+    logger.info("==================== Rotamer Energy Extraction Complete ====================")
 
     return residue_library, ig, rot_sets, scorefxn
 
@@ -106,7 +107,7 @@ def create_packing_task(pose, active_start, active_end):
     return packer_task
 
 
-def safe_score_pose(scorefxn, pose, max_retries=3):
+def safe_score_pose(scorefxn, pose, logger: logging.Logger, max_retries=3):
     attempts = 0
 
     clean_backup = pose.clone()
@@ -114,7 +115,7 @@ def safe_score_pose(scorefxn, pose, max_retries=3):
     while attempts < max_retries:
         try:
             scorefxn(pose)
-            print("Pose scored successfully!")
+            logger.debug("Pose scored successfully!")
             return pose
 
         except RuntimeError as e:
@@ -123,13 +124,13 @@ def safe_score_pose(scorefxn, pose, max_retries=3):
             attempts += 1
 
             if "FullatomDisulfideEnergyContainer.cc" in error_msg:
-                fixed = fix_disulfide_bond(clean_backup)
+                fixed = fix_disulfide_bond(clean_backup, logger)
 
             if fixed:
-                print("Retrying score...\n")
+                logger.debug("Retrying score...")
                 pose.assign(clean_backup)
             else:
-                print("Could not find (or fix) error for", error_msg)
+                logger.exception("Could not find (or fix) error for", error_msg)
                 raise e
     raise RuntimeError("Exceeded maximum retries for fixing the pose.")
 
@@ -156,7 +157,7 @@ def get_score_function():
     return scorefxn
 
 
-def fix_disulfide_bond(pose):
+def fix_disulfide_bond(pose, logger: logging.Logger):
     for i in range(1, pose.total_residue() + 1):
         res = pose.residue(i)
 
@@ -167,9 +168,9 @@ def fix_disulfide_bond(pose):
 
         # Check if the partner is missing (0) or outside our fragment
         if partner_id == 0 or partner_id > pose.total_residue():
-            print(f" -> Dangling disulfide at CYS {i} (pointed to missing partner {partner_id}). Fixing...")
+            logger.debug(f" -> Dangling disulfide at CYS {i} (pointed to missing partner {partner_id}). Fixing...")
             remove_variant_type_from_pose_residue(pose, DISULFIDE, i)
             return True
         # else:
-        #     print(f" -> Intact disulfide found between CYS {i} and CYS {partner_id}. Preserving!")
+        #     logger.debug(f" -> Intact disulfide found between CYS {i} and CYS {partner_id}. Preserving!")
     return False

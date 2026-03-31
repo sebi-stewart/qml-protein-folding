@@ -55,7 +55,7 @@ def run_one_config(config: RunConfig, seed_versions: list[int], cost_hamiltonian
     start = time.perf_counter()
 
     # 1. Generate QNodes (Make sure they use interface="jax")
-    cost_function, sample_function = qaoa_func_generator(cost_hamiltonian, ring_xy_mixer_layer, basic_params)
+    cost_function, sample_function = qaoa_func_generator(cost_hamiltonian, ring_xy_mixer_layer, basic_params, logger)
 
     # 2. RUN ALL 30 SEEDS ON THE GPU SIMULTANEOUSLY
     batched_probabilities = batched_qaoa_execution(
@@ -64,7 +64,7 @@ def run_one_config(config: RunConfig, seed_versions: list[int], cost_hamiltonian
         config.qaoaParams,
         seed_versions,
         basic_params.num_qubits,
-        16, # GB
+        10, # GB
         logger
     )
 
@@ -89,7 +89,7 @@ def run_one_config(config: RunConfig, seed_versions: list[int], cost_hamiltonian
             'rank_matches': prob_rank_match
         })
 
-        logger.debug(f"Seed {seed} completed. Rank Match: {prob_rank_match}\n")
+        logger.debug(f"Seed {seed} completed. Rank Match: {prob_rank_match}")
 
     end = time.perf_counter()
     time_taken = end - start
@@ -100,10 +100,10 @@ def run_one_config(config: RunConfig, seed_versions: list[int], cost_hamiltonian
 
 def run_one_residue_combo(large_run_config: LargeRunConfig, benchmark_pose: Pose, df_dir: str):
     logger = logging.getLogger("main_loop")
-    logger.info(
-        "\n================================================================================================================\n")
+    logger.info("================================================================================================================")
     logger.info(f"====================Starting new run {large_run_config}====================")
     residue_library, ig, rot_sets, scorefxn = extract_top_n_rotamers(benchmark_pose,
+                                                                     logger=logger,
                                                                      n=large_run_config.n,
                                                                      active_start=large_run_config.start,
                                                                      active_end=large_run_config.end)
@@ -112,11 +112,13 @@ def run_one_residue_combo(large_run_config: LargeRunConfig, benchmark_pose: Pose
 
     # Generating QUBO (Quadratic Unconstrained Binary Optimisation) Model, and then reduce it
     h_linear, J_quadratic, global_offset = extract_and_reduce_tensors(residue_library, ig)
+
+    logger.debug("initializing basic params")
     basic_params: BasicParams = init_basic_params(h_linear)
     base_qaoa_params: QAOAParams = default_qaoa_params()
 
     # Generate the actual observable and running functions we will use in the QAOA Algorithm
-    cost_hamiltonian, hamiltonian_size = build_ising_hamiltonian(h_linear, J_quadratic)
+    cost_hamiltonian, hamiltonian_size = build_ising_hamiltonian(h_linear, J_quadratic, logger)
     if hamiltonian_size > 22:
         logger.error("Hamiltonian Will Exceed Memory Available, skipping")
         return

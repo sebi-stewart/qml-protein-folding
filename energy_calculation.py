@@ -104,7 +104,7 @@ def compare_energies(valid_conformations: List[Conformation]):
 
     rank_match = [abs(conf['quant_idx'] - conf['bio_idx']) for idx, conf in enumerate(energies)]
     if not all(match == 0 for match in rank_match):
-        print(f"\nERROR: ================== Not all ranks matched, {rank_match}\n")
+        print(f"ERROR: ================== Not all ranks matched, {rank_match}\n")
 
     if np.std(deltas) > 0.1:
         raise AssertionError(f"Deltas std deviation was too high: {np.std(deltas)}")

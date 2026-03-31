@@ -1,4 +1,6 @@
 import itertools
+import logging
+
 import pennylane as qml
 from pyrosetta.rosetta.core.pack.interaction_graph import InteractionGraphFactory
 
@@ -99,7 +101,7 @@ def extract_and_reduce_tensors(residue_library: dict[int, TrackedResidue], ig: I
     return h_flex_linear, J_flex_quadratic, global_offset
 
 
-def build_ising_hamiltonian(h_flex, J_flex) -> tuple[qml.Hamiltonian, int]:
+def build_ising_hamiltonian(h_flex, J_flex, logger: logging.Logger) -> tuple[qml.Hamiltonian, int]:
     """
     Compiles the reduced classical PyRosetta tensors into a PennyLane Pauli-Z Hamiltonian,
     incorporating the background thermodynamic offset.
@@ -182,5 +184,5 @@ def build_ising_hamiltonian(h_flex, J_flex) -> tuple[qml.Hamiltonian, int]:
         coeffs.append(C_kl)
         observables.append(qml.PauliZ(wires=k) @ qml.PauliZ(wires=l))
 
-    print(f"Reduced Hamiltonian built: {num_qubits} Qubits, {len(coeffs)} Pauli strings.")
+    logger.info(f"Reduced Hamiltonian built: {num_qubits} Qubits, {len(coeffs)} Pauli strings.")
     return qml.dot(coeffs, observables), num_qubits

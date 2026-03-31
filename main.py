@@ -75,7 +75,7 @@ if __name__ == '__main__':
 
 
     for large_config in large_runs:
-        run_one_residue_combo(large_config, benchmark_pose, log_dir, df_dir)
+        run_one_residue_combo(large_config, benchmark_pose, df_dir)
 
         current_explored_state_space += (large_config.n - 1)**(large_config.end - large_config.start + 1)
         print(f" =============================== {current_explored_state_space/explorable_state_space:3.4f}% COMPLETE ({current_explored_state_space}/{explorable_state_space}) =============================== ")

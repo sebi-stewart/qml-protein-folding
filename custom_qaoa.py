@@ -20,7 +20,7 @@ def get_cached_device(num_qubits, device_type):
         _DEVICE_CACHE[cache_key] = qml.device(device_type, wires=range(num_qubits))
     return _DEVICE_CACHE[cache_key]
 
-def qaoa_func_generator(H_ising, mixer_layer, generator_params: BasicParams):
+def qaoa_func_generator(H_ising, mixer_layer, generator_params: BasicParams, logger: logging.Logger):
     num_qubits = generator_params.num_qubits
     wire_offsets = generator_params.wire_offsets
     seq_positions = generator_params.seq_positions
@@ -28,7 +28,7 @@ def qaoa_func_generator(H_ising, mixer_layer, generator_params: BasicParams):
 
     device_type = 'lightning.gpu' if (IS_LINUX and num_qubits > 18) else 'lightning.qubit'
     dev = get_cached_device(num_qubits, device_type)
-    print(f"Running on {device_type} for {num_qubits} qubits")
+    logger.debug(f"Running on {device_type} for {num_qubits} qubits")
 
     def qaoa_layer(gamma, beta):
         qml.qaoa.cost_layer(gamma, H_ising)
@@ -76,7 +76,7 @@ def run_qaoa(cost_function, qaoa_params: QAOAParams):
     opt = qml.AdamOptimizer(stepsize=qaoa_params.optimiser_stepsize)
     current_params = initial_params
 
-    print("\n==================== QAOA Run ====================")
+    print("==================== QAOA Run ====================")
     print(f"Commencing QAOA Optimization [p={qaoa_params.layers}]...")
     for epoch in range(qaoa_params.epochs):
         current_params, cost = opt.step_and_cost(cost_function, current_params)
@@ -84,7 +84,7 @@ def run_qaoa(cost_function, qaoa_params: QAOAParams):
             print(f"Epoch {epoch:3d} | Cost: {cost:.4f}")
 
     print("Optimization converged.")
-    print("==================== QAOA Run COMPLETE ====================\n")
+    print("==================== QAOA Run COMPLETE ====================")
 
     return current_params
 

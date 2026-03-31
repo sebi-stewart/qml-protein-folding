@@ -9,8 +9,6 @@ class BasicParams:
     num_qubits: int
 
 def init_basic_params(h_flex_linear) -> BasicParams:
-    print("initializing basic params")
-
     seq_positions = sorted(list(h_flex_linear.keys()))
     wire_offsets = {}
     current_wire = 0

@@ -3,6 +3,15 @@ import pennylane.numpy as np
 from misc import QAOAParams, BasicParams
 from constants import IS_LINUX
 
+_DEVICE_CACHE = {}
+
+def get_cached_device(num_qubits, device_type):
+    cache_key = (num_qubits, device_type)
+    if cache_key not in _DEVICE_CACHE:
+
+        _DEVICE_CACHE.clear()
+        _DEVICE_CACHE[cache_key] = qml.device(device_type, wires=range(num_qubits))
+    return _DEVICE_CACHE[cache_key]
 
 def qaoa_func_generator(H_ising, mixer_layer, generator_params: BasicParams):
     num_qubits = generator_params.num_qubits
@@ -10,7 +19,9 @@ def qaoa_func_generator(H_ising, mixer_layer, generator_params: BasicParams):
     seq_positions = generator_params.seq_positions
     rotamer_counts = generator_params.rotamer_counts
 
-    dev = qml.device('lightning.gpu' if IS_LINUX else 'lightning.qubit', wires=range(num_qubits))
+    device_type = 'lightning.gpu' if (IS_LINUX and num_qubits > 18) else 'lightning.qubit'
+    dev = get_cached_device(num_qubits, device_type)
+    print(f"Running on {device_type} for {num_qubits} qubits")
 
     def qaoa_layer(gamma, beta):
         qml.qaoa.cost_layer(gamma, H_ising)

@@ -82,6 +82,45 @@ def evaluate_singular_pyrosetta_energy(conformation: Conformation, pose,
 
     return new_pose
 
+def extract_anomaly_zones(rank_match, energies, logger: logging.Logger):
+    # 1. Find the exact indices where the mismatch occurred
+    breaking_indices = [idx for idx, diff in enumerate(rank_match) if diff != 0]
+
+    # 2 & 3. Create and merge the anomaly zones (context windows of +/- 1)
+    anomaly_zones = []
+    max_idx = len(energies) - 1
+
+    for idx in breaking_indices:
+        # Define the window, ensuring we don't drop below 0 or go past the list length
+        start = max(0, idx - 1)
+        end = min(max_idx, idx + 1)
+
+        if not anomaly_zones:
+            # Add the first zone
+            anomaly_zones.append([start, end])
+        else:
+            # Check if the current zone overlaps or touches the previous zone
+            last_zone = anomaly_zones[-1]
+            if start <= last_zone[1]:
+                # Merge them by extending the end of the previous zone
+                last_zone[1] = max(last_zone[1], end)
+            else:
+                # No overlap, so we add it as a new distinct zone
+                anomaly_zones.append([start, end])
+
+    # 4. Print out the energies within our nicely merged anomaly zones
+    for start, end in anomaly_zones:
+        logger.debug(f"\n--- Anomaly Zone: Indices {start} to {end} ---")
+
+        # Loop through the specific merged range and print the energy comparisons
+        for i in range(start, end + 1):
+            q_energy = energies[i]['quantum_energy']
+            b_energy = energies[i]['biological_energy']
+
+            # Optional: Add a marker (like '>>>') to instantly see which items actually broke the rank
+            marker = ">>>" if i in breaking_indices else "   "
+            logger.debug(f"{marker} IDX {i}: q-energy={q_energy} | b-energy={b_energy}")
+
 def compare_energies(valid_conformations: List[Conformation], logger: logging.Logger):
     deltas = []
     for conf in valid_conformations:
@@ -89,7 +128,7 @@ def compare_energies(valid_conformations: List[Conformation], logger: logging.Lo
 
         delta = conf.quantum_energy - conf.biological_energy
         deltas.append(delta)
-    logger.debug("Value Deltas:", np.mean(deltas), np.std(deltas))
+    logger.debug(f"Value Deltas: {np.mean(deltas)} | {np.std(deltas)}")
 
 
     # Check the pyrosetta and QUBO oderings match
@@ -107,6 +146,8 @@ def compare_energies(valid_conformations: List[Conformation], logger: logging.Lo
     rank_match = [abs(conf['quant_idx'] - conf['bio_idx']) for idx, conf in enumerate(energies)]
     if not all(match == 0 for match in rank_match):
         logger.error(f"ERROR: ================== Not all ranks matched, {rank_match}\n")
+        extract_anomaly_zones(rank_match, energies, logger)
+
 
     if np.std(deltas) > 0.1:
         raise AssertionError(f"Deltas std deviation was too high: {np.std(deltas)}")

@@ -194,6 +194,8 @@ def batched_qaoa_execution(cost_function, sample_function, qaoa_params, seed_ver
         # Epoch Loop for this chunk
         for epoch in range(qaoa_params.epochs):
             current_params, current_opt_state, batched_costs = batched_update_step(current_params, current_opt_state)
+            if epoch % 10 == 0:
+                logger.debug(f"[EPOCH Tracker] Epoch  {epoch} | Cost: {batched_costs}")
 
         # Sample the final probabilities
         chunk_probs = batched_sample(current_params)

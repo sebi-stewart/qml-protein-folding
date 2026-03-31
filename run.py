@@ -99,7 +99,7 @@ def run_one_config(config: RunConfig, seed_versions: list[int], cost_hamiltonian
 
 
 def run_one_residue_combo(large_run_config: LargeRunConfig, benchmark_pose: Pose, df_dir: str):
-    logger = logging.getLogger("main_loop")
+    logger = logging.getLogger("qaoa_pf.main_loop")
     logger.info("================================================================================================================")
     logger.info(f"====================Starting new run {large_run_config}====================")
     residue_library, ig, rot_sets, scorefxn = extract_top_n_rotamers(benchmark_pose,
@@ -131,7 +131,7 @@ def run_one_residue_combo(large_run_config: LargeRunConfig, benchmark_pose: Pose
             QAOAParams(p, base_qaoa_params.seed,
                        base_qaoa_params.optimiser_stepsize,
                        base_qaoa_params.epochs)
-            , logging.getLogger(f"p=[{p}]")) for p in p_runs
+            , logging.getLogger(f"qaoa_pf.p=[{p}]")) for p in p_runs
     ]
 
     run_records = []

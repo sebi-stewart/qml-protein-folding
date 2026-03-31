@@ -12,7 +12,6 @@ class Conformation:
     probability: np.float64
     quantum_energy: np.float64 | None
     biological_energy: np.float64 | None
-    pose: object
 
 def validate_conformations(probabilities, params: BasicParams) -> List[Conformation]:
     num_qubits = params.num_qubits
@@ -49,7 +48,7 @@ def validate_conformations(probabilities, params: BasicParams) -> List[Conformat
             valid_conformations.append(
                 Conformation(bitstring,
                              probabilities[idx],
-                             None, None, None
+                             None, None
                              )
             )
     print(wire_offsets)

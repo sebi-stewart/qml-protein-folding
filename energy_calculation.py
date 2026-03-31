@@ -45,7 +45,6 @@ def evaluate_pyrosetta_energies(valid_conformations: List[Conformation],
     for conformation in valid_conformations:
         new_pose = evaluate_singular_pyrosetta_energy(conformation, original_pose, residue_library, params)
 
-        conformation.pose = new_pose
         conformation.biological_energy = np.float64(scorefxn(new_pose))
 
 def evaluate_singular_pyrosetta_energy(conformation: Conformation, pose,
@@ -84,7 +83,7 @@ def evaluate_singular_pyrosetta_energy(conformation: Conformation, pose,
 def compare_energies(valid_conformations: List[Conformation]):
     deltas = []
     for conf in valid_conformations:
-        assert None not in (conf, conf.quantum_energy, conf.biological_energy, conf.pose), f"Some item in the conformation class is None {conf}"
+        assert None not in (conf, conf.quantum_energy, conf.biological_energy), f"Some item in the conformation class is None {conf}"
 
         delta = conf.quantum_energy - conf.biological_energy
         deltas.append(delta)

@@ -4,10 +4,27 @@ from benchmark import full_bpti_benchmark
 from initialisation import initialize_rosetta
 from run import LargeRunConfig, run_one_residue_combo
 
+import logging
 
 log_dir = "overnight_runs"
-log_prefix = ""
 df_dir = "overnight_results"
+
+# set up logging to file - see previous section for more details
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+                    datefmt='%m-%d %H:%M',
+                    filename=f'./{log_dir}/myapp.log',
+                    filemode='w')
+# define a Handler which writes INFO messages or higher to the sys.stderr
+console = logging.StreamHandler()
+console.setLevel(logging.INFO)
+# set a format which is simpler for console use
+formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
+# tell the handler to use this format
+console.setFormatter(formatter)
+# add the handler to the root logger
+logging.getLogger().addHandler(console)
+
 # df_file = "run_5_ring_mixer"
 
 large_runs = [
@@ -58,7 +75,7 @@ if __name__ == '__main__':
 
 
     for large_config in large_runs:
-        run_one_residue_combo(large_config, benchmark_pose, log_prefix, log_dir, df_dir)
+        run_one_residue_combo(large_config, benchmark_pose, log_dir, df_dir)
 
         current_explored_state_space += (large_config.n - 1)**(large_config.end - large_config.start + 1)
         print(f" =============================== {current_explored_state_space/explorable_state_space:3.4f}% COMPLETE ({current_explored_state_space}/{explorable_state_space}) =============================== ")

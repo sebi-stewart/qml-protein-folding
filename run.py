@@ -140,7 +140,7 @@ def run_one_residue_combo(large_run_config: LargeRunConfig, benchmark_pose: Pose
                     temp_df = pd.DataFrame(run_records)
                     temp_df.to_pickle(f"{df_dir}/{df_file}_layers_{layers}_checkpoint.pkl")
 
-                    gc.collect()
+        gc.collect()
 
         end = time.perf_counter()
         time_taken = end - start

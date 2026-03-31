@@ -184,6 +184,7 @@ def batched_qaoa_execution(cost_function, sample_function, qaoa_params, seed_ver
 
     all_final_probs = []
     for b in range(num_batches):
+        logger.debug(f"[BATCH Tracker] Batch {b} / {num_batches}")
         # Extract the PRNG keys for this specific chunk
         chunk_keys = keys[b * batch_size: (b + 1) * batch_size]
 
@@ -195,7 +196,7 @@ def batched_qaoa_execution(cost_function, sample_function, qaoa_params, seed_ver
         for epoch in range(qaoa_params.epochs):
             current_params, current_opt_state, batched_costs = batched_update_step(current_params, current_opt_state)
             if epoch % 10 == 0:
-                logger.debug(f"[EPOCH Tracker] Epoch  {epoch} | Cost: {batched_costs}")
+                logger.debug(f"\t[EPOCH Tracker] Epoch  {epoch} | Cost: {batched_costs}")
 
         # Sample the final probabilities
         chunk_probs = batched_sample(current_params)

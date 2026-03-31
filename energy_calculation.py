@@ -1,4 +1,6 @@
 import itertools
+import logging
+
 import numpy as np
 from typing import List
 
@@ -80,14 +82,14 @@ def evaluate_singular_pyrosetta_energy(conformation: Conformation, pose,
 
     return new_pose
 
-def compare_energies(valid_conformations: List[Conformation]):
+def compare_energies(valid_conformations: List[Conformation], logger: logging.Logger):
     deltas = []
     for conf in valid_conformations:
         assert None not in (conf, conf.quantum_energy, conf.biological_energy), f"Some item in the conformation class is None {conf}"
 
         delta = conf.quantum_energy - conf.biological_energy
         deltas.append(delta)
-    print("Value Deltas:", np.mean(deltas), np.std(deltas))
+    logger.debug("Value Deltas:", np.mean(deltas), np.std(deltas))
 
 
     # Check the pyrosetta and QUBO oderings match
@@ -104,7 +106,7 @@ def compare_energies(valid_conformations: List[Conformation]):
 
     rank_match = [abs(conf['quant_idx'] - conf['bio_idx']) for idx, conf in enumerate(energies)]
     if not all(match == 0 for match in rank_match):
-        print(f"ERROR: ================== Not all ranks matched, {rank_match}\n")
+        logger.error(f"ERROR: ================== Not all ranks matched, {rank_match}\n")
 
     if np.std(deltas) > 0.1:
         raise AssertionError(f"Deltas std deviation was too high: {np.std(deltas)}")
@@ -113,18 +115,18 @@ def compare_energies(valid_conformations: List[Conformation]):
 def calculate_and_compare_energies(valid_conformations: List[Conformation],
                                    h_flex, J_flex, global_offset,
                                    original_pose, scorefxn, residue_library: dict[int, TrackedResidue],
-                                   params: BasicParams):
-    print("\n==================== ENERGY OPERATIONS ====================")
-    print(f"Calculating Quantum Energies for all {len(valid_conformations)} conformations")
+                                   params: BasicParams, logger: logging.Logger):
+    logger.debug("==================== ENERGY OPERATIONS ====================")
+    logger.debug(f"Calculating Quantum Energies for all {len(valid_conformations)} conformations")
     evaluate_quantum_energies(valid_conformations, h_flex, J_flex, global_offset, params)
 
-    print(f"Calculating Pyrosetta for all {len(valid_conformations)} conformations ")
+    logger.debug(f"Calculating Pyrosetta for all {len(valid_conformations)} conformations ")
     evaluate_pyrosetta_energies(valid_conformations, original_pose, scorefxn, residue_library, params)
 
-    print(f"Comparing both energy types for all {len(valid_conformations)} conformations ")
-    compare_energies(valid_conformations)
+    logger.debug(f"Comparing both energy types for all {len(valid_conformations)} conformations ")
+    compare_energies(valid_conformations, logger)
 
-    print("==================== ENERGY OPERATIONS COMPLETE ====================\n")
+    logger.debug("==================== ENERGY OPERATIONS COMPLETE ====================\n")
 
 
 def print_match_scores(valid_conformations):

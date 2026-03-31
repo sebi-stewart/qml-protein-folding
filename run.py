@@ -71,13 +71,13 @@ def run_one_config(config: RunConfig, seed_versions: list[int], cost_hamiltonian
     # 3. Classical Post-Processing and Logging
     for i, seed in enumerate(seed_versions):
         seed_probs = batched_probabilities[i]
-        valid_conformations = validate_conformations(seed_probs, basic_params)
+        valid_conformations = validate_conformations(seed_probs, basic_params, logger)
 
         try:
             calculate_and_compare_energies(valid_conformations,
                                            h_linear, J_quadratic, global_offset,
                                            benchmark_pose, scorefxn, residue_library,
-                                           basic_params)
+                                           basic_params, logger)
         except AssertionError as e:
             logger.exception(e)
 

@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 import numpy as np
 from typing import List
@@ -13,7 +14,7 @@ class Conformation:
     quantum_energy: np.float64 | None
     biological_energy: np.float64 | None
 
-def validate_conformations(probabilities, params: BasicParams) -> List[Conformation]:
+def validate_conformations(probabilities, params: BasicParams, logger: logging.Logger) -> List[Conformation]:
     num_qubits = params.num_qubits
     wire_offsets = params.wire_offsets
     seq_positions = params.seq_positions
@@ -51,12 +52,12 @@ def validate_conformations(probabilities, params: BasicParams) -> List[Conformat
                              None, None
                              )
             )
-    print(wire_offsets)
+    logger.debug(f"Wire offsets: {wire_offsets}")
     if not valid_conformations:
         raise ValueError(
             "Zero valid conformations found in the top sampled states. You must increase QAOA depth 'p' or increase the penalty multiplier.")
 
-    print(f"Valid to Non-Valid Ration: {len(valid_conformations)} - {len(top_indices) - len(valid_conformations)}")
+    logger.debug(f"Valid to Non-Valid Ration: {len(valid_conformations)} - {len(top_indices) - len(valid_conformations)}")
 
     return valid_conformations
 

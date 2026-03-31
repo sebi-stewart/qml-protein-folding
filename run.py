@@ -62,7 +62,10 @@ def run_one_config(config: RunConfig, seed_versions: list[int], cost_hamiltonian
         cost_function,
         sample_function,
         config.qaoaParams,
-        seed_versions
+        seed_versions,
+        basic_params.num_qubits,
+        16, # GB
+        logger
     )
 
     # 3. Classical Post-Processing and Logging

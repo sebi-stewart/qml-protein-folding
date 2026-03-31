@@ -131,3 +131,53 @@ def run_qaoa_jax(cost_function, qaoa_params: QAOAParams):
     print("==================== QAOA Run COMPLETE ====================\n")
 
     return current_params
+
+def batched_qaoa_execution(cost_function, sample_function, qaoa_params, seed_versions):
+    """
+    Executes all seeds simultaneously on the A100.
+    Strictly free of PyRosetta objects and file I/O.
+    """
+    num_seeds = len(seed_versions)
+
+    # 1. Vectorize the PRNG Keys (One for each seed)
+    master_key = jax.random.PRNGKey(seed_versions[0])  # Use first seed as master
+    keys = jax.random.split(master_key, num_seeds)
+
+    # 2. Initialize a batched parameter tensor of shape (30, 2, layers)
+    def init_params(key):
+        return jax.random.uniform(key, shape=(2, qaoa_params.layers), minval=-jnp.pi, maxval=jnp.pi)
+
+    batched_params = jax.vmap(init_params)(keys)
+
+    # 3. Setup Optax Optimizer
+    optimizer = optax.adam(learning_rate=qaoa_params.optimiser_stepsize)
+
+    # Initialize batched optimizer state
+    batched_opt_state = jax.vmap(optimizer.init)(batched_params)
+
+    # 4. Define the single-seed update step
+    def single_update_step(params, opt_state_inner):
+        cost_val, grads = jax.value_and_grad(cost_function)(params)
+        updates, new_opt_state = optimizer.update(grads, opt_state_inner, params)
+        new_params = optax.apply_updates(params, updates)
+        return new_params, new_opt_state, cost_val
+
+    # 5. JIT-Compile the VMAP'd update step
+    # in_axes=(0, 0) means "vectorize over the first dimension of both inputs"
+    @jax.jit
+    def batched_update_step(params_batch, opt_state_batch):
+        return jax.vmap(single_update_step, in_axes=(0, 0))(params_batch, opt_state_batch)
+
+    # 6. Execute the Epoch Loop
+    current_params = batched_params
+    current_opt_state = batched_opt_state
+
+    for epoch in range(qaoa_params.epochs):
+        # This executes 30 seeds simultaneously on the GPU
+        current_params, current_opt_state, batched_costs = batched_update_step(current_params, current_opt_state)
+
+    # 7. Batched Sampling
+    # vmap the PennyLane sample_function over the final parameters
+    batched_probs = jax.vmap(sample_function)(current_params)
+
+    return batched_probs  # Shape: (30, 2^N)

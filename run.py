@@ -11,7 +11,7 @@ from pyrosetta import Pose
 
 from energy_calculation import calculate_and_compare_energies
 from rotamer_extraction import TrackedResidue, extract_top_n_rotamers
-from custom_qaoa import qaoa_func_generator, run_qaoa, run_qaoa_jax
+from custom_qaoa import qaoa_func_generator, run_qaoa, run_qaoa_jax, batched_qaoa_execution
 from h_mixer import custom_xy_mixer_layer, ring_xy_mixer_layer
 
 from validation import validate_conformations, Conformation
@@ -70,6 +70,7 @@ def extract_rank_matches(valid_conformations: list[Conformation]):
     return [abs(conf['probs_idx'] - conf['quant_idx']) for _, conf in enumerate(energies)]
 
 
+
 def run_one_residue_combo(large_run_config: LargeRunConfig, benchmark_pose: Pose, log_prefix: str, log_dir: str, df_dir: str):
     print(
         "\n================================================================================================================\n")
@@ -108,38 +109,43 @@ def run_one_residue_combo(large_run_config: LargeRunConfig, benchmark_pose: Pose
 
     for config in run_configs:
         layers = config.qaoaParams.layers
-        print(f"===== Starting run (Layers: {layers}) - {len(seed_versions)} seeds =====")
-
+        print(f"===== Starting batched GPU run (Layers: {layers}) =====")
         start = time.perf_counter()
 
+        # 1. Generate QNodes (Make sure they use interface="jax")
+        cost_function, sample_function = qaoa_func_generator(cost_hamiltonian, ring_xy_mixer_layer, basic_params)
+
+        # 2. RUN ALL 30 SEEDS ON THE GPU SIMULTANEOUSLY
+        batched_probabilities = batched_qaoa_execution(
+            cost_function,
+            sample_function,
+            config.qaoaParams,
+            seed_versions
+        )
+
+        # 3. Classical Post-Processing and Logging
         with open(f"{log_dir}/{config.log_file}", "w") as log_file:
-            with contextlib.redirect_stdout(log_file):
-                for seed in seed_versions:
-                    config.qaoaParams.seed = seed
+            for i, seed in enumerate(seed_versions):
+                seed_probs = batched_probabilities[i]
+                valid_conformations = validate_conformations(seed_probs, basic_params)
 
-                    np.random.seed(seed)
-                    random.seed(seed)
+                try:
+                    calculate_and_compare_energies(valid_conformations,
+                                                   h_linear, J_quadratic, global_offset,
+                                                   benchmark_pose, scorefxn, residue_library,
+                                                   basic_params)
+                except AssertionError as e:
+                    log_file.write(f"ERROR ERROR ERROR {e}")
 
-                    # Execute the quantum pipeline
-                    valid_conformations = run(
-                        h_linear, J_quadratic, global_offset,
-                        cost_hamiltonian, benchmark_pose, scorefxn, residue_library,
-                        basic_params, config.qaoaParams
-                    )
+                prob_rank_match = extract_rank_matches(valid_conformations)
 
-                    # Extract metrics
-                    prob_rank_match = extract_rank_matches(valid_conformations)
+                run_records.append({
+                    'layers': layers,
+                    'seed': seed,
+                    'rank_matches': prob_rank_match
+                })
 
-                    # SAVE RAW DATA: Append every single run as an independent record
-                    run_records.append({
-                        'layers': layers,
-                        'seed': seed,
-                        'rank_matches': prob_rank_match
-                    })
-
-                    temp_df = pd.DataFrame(run_records)
-                    temp_df.to_pickle(f"{df_dir}/{df_file}_layers_{layers}_checkpoint.pkl")
-
+                log_file.write(f"Seed {seed} completed. Rank Match: {prob_rank_match}\n")
         gc.collect()
 
         end = time.perf_counter()
@@ -151,3 +157,5 @@ def run_one_residue_combo(large_run_config: LargeRunConfig, benchmark_pose: Pose
 
     final_df = pd.DataFrame(run_records)
     final_df.to_pickle(f"{df_dir}/{df_file}_final.pkl")
+
+    gc.collect()

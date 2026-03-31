@@ -119,7 +119,7 @@ def extract_anomaly_zones(rank_match, energies, logger: logging.Logger):
 
             # Optional: Add a marker (like '>>>') to instantly see which items actually broke the rank
             marker = ">>>" if i in breaking_indices else "   "
-            logger.debug(f"{marker} IDX {i}: q-energy={q_energy} | b-energy={b_energy}")
+            logger.debug(f"{marker} IDX {i}: q-energy={q_energy:13.6f} | b-energy={b_energy:13.6f} | {(q_energy - b_energy):.6f}")
 
 def compare_energies(valid_conformations: List[Conformation], logger: logging.Logger):
     deltas = []

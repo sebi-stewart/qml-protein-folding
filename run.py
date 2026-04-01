@@ -8,12 +8,12 @@ import numpy as np
 
 from pyrosetta import Pose
 
-from energy_calculation import calculate_and_compare_energies
+from energy_calculation import calculate_and_compare_energies, extract_lowest_energy_bitstrings
 from rotamer_extraction import TrackedResidue, extract_top_n_rotamers
 from custom_qaoa import qaoa_func_generator, run_qaoa, run_qaoa_jax, batched_qaoa_execution
 from h_mixer import custom_xy_mixer_layer, ring_xy_mixer_layer
 
-from validation import validate_conformations, Conformation
+from validation import validate_conformations, Conformation, get_all_valid_bitstrings
 
 from misc import init_basic_params, default_qaoa_params, BasicParams, QAOAParams
 from h_ising_creation import extract_and_reduce_tensors, build_ising_hamiltonian
@@ -47,7 +47,7 @@ def extract_rank_matches(valid_conformations: list[Conformation]):
 
 def run_one_config(config: RunConfig, seed_versions: list[int], cost_hamiltonian, basic_params,
                    h_linear, J_quadratic, global_offset,
-                   benchmark_pose, scorefxn, residue_library, run_records):
+                   benchmark_pose, scorefxn, residue_library:  dict[int, TrackedResidue], run_records, global_match_scores):
     layers = config.qaoaParams.layers
     logger = config.logger
 
@@ -67,6 +67,11 @@ def run_one_config(config: RunConfig, seed_versions: list[int], cost_hamiltonian
         10, # GB
         logger
     )
+
+    # 3.1 Extract the global best state out of all valid rotamer conformations
+    valid_bitstrings = get_all_valid_bitstrings(basic_params, logger)
+    lowest_energy_bitstrings: set[int] = extract_lowest_energy_bitstrings(valid_bitstrings, h_linear, J_quadratic, logger, 1e-6, basic_params)
+
 
     # 3. Classical Post-Processing and Logging
     for i, seed in enumerate(seed_versions):
@@ -135,14 +140,18 @@ def run_one_residue_combo(large_run_config: LargeRunConfig, benchmark_pose: Pose
     ]
 
     run_records = []
+    global_match_scores = []
 
     for config in run_configs:
         run_one_config(config, seed_versions, cost_hamiltonian, basic_params,
                        h_linear, J_quadratic, global_offset,
-                       benchmark_pose, scorefxn, residue_library, run_records)
+                       benchmark_pose, scorefxn, residue_library, run_records, global_match_scores)
     logger.info(f"====================Large Run Complete Saving to DF====================")
 
     final_df = pd.DataFrame(run_records)
     final_df.to_pickle(f"{df_dir}/{df_file}.pkl")
+
+    global_match_score_df = pd.DataFrame(global_match_scores)
+    global_match_score_df.to_pickle(f"{df_dir}/{df_file}_global_match_scores.pkl")
 
     gc.collect()

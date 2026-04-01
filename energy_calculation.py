@@ -14,11 +14,10 @@ def evaluate_quantum_energies(valid_conformations: List[Conformation], h_flex, J
     rotamer_counts = params.rotamer_counts
 
     for conformation in valid_conformations:
-        energy = evaluate_singular_quantum_energy(conformation, h_flex, J_flex, global_offset, wire_offsets, rotamer_counts)
+        energy = evaluate_singular_quantum_energy(conformation.bitstring, h_flex, J_flex, global_offset, wire_offsets, rotamer_counts)
         conformation.quantum_energy = energy
 
-def evaluate_singular_quantum_energy(conformation, h_flex, J_flex, global_offset, wire_offsets, rotamer_counts) -> np.float64:
-    bitstring = conformation.bitstring
+def evaluate_singular_quantum_energy(bitstring, h_flex, J_flex, global_offset, wire_offsets, rotamer_counts) -> np.float64:
     current_energy = np.float64(global_offset)
 
     # One body energies
@@ -169,6 +168,23 @@ def calculate_and_compare_energies(valid_conformations: List[Conformation],
 
     logger.debug("==================== ENERGY OPERATIONS COMPLETE ====================\n")
 
+def extract_lowest_energy_bitstrings(valid_bitstrings, h_linear, J_quadratic, logger, epsilon, params: BasicParams) -> set[int]:
+    def bitstring_to_int(bitstring):
+        return int(''.join(map(str, bitstring)), 2)
+
+    wire_offsets = params.wire_offsets
+    rotamer_counts = params.rotamer_counts
+
+    energies = []
+    for valid_bitstring in valid_bitstrings:
+        qubo_energy = evaluate_singular_quantum_energy(valid_bitstring, h_linear, J_quadratic, 0.0, wire_offsets, rotamer_counts)
+        energies.append(qubo_energy)
+    min_energy = min(energies)
+    lowest_energy_bitstrings = set()
+    for bitstring, energy in zip(valid_bitstrings, energies):
+        if abs(energy - min_energy) < epsilon:
+            lowest_energy_bitstrings.add(bitstring_to_int(bitstring))
+    return lowest_energy_bitstrings
 
 def print_match_scores(valid_conformations):
     valid_conformations.sort(key=lambda conf: conf['probability'], reverse=True)

@@ -1,5 +1,7 @@
 import logging
 from dataclasses import dataclass
+from itertools import product
+
 import numpy as np
 from typing import List
 from constants import TOP_CONFORMATION_COUNTS
@@ -61,3 +63,32 @@ def validate_conformations(probabilities, params: BasicParams, logger: logging.L
 
     return valid_conformations
 
+
+def get_all_valid_bitstrings(params: BasicParams, logger: logging.Logger) -> List[Conformation]:
+    num_qubits = params.num_qubits
+    wire_offsets = params.wire_offsets
+    seq_positions = params.seq_positions
+    rotamer_counts = params.rotamer_counts
+
+    valid_bitstrings = []
+
+    # Generate all combinations of rotamer choices for each residue
+    rotamer_choices = []
+    for seq in seq_positions:
+        num_rots = rotamer_counts[seq]
+        rotamer_choices.append(range(num_rots))
+
+    # Take Cartesian product of all rotamer choices
+    for rotamer_combo in product(*rotamer_choices):
+        bitstring = [0] * num_qubits
+
+        # For each residue, set the chosen rotamer bit to 1
+        for seq_idx, seq in enumerate(seq_positions):
+            start_wire = wire_offsets[seq]
+            chosen_rotamer = rotamer_combo[seq_idx]
+            bitstring[start_wire + chosen_rotamer] = 1
+
+        valid_bitstrings.append(bitstring)
+
+    logger.debug(f"Total Valid Conformations: {len(valid_bitstrings)}")
+    return valid_bitstrings

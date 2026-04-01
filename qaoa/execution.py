@@ -1,0 +1,79 @@
+import logging
+import math
+
+import jax
+import jax.numpy as jnp
+import optax
+
+
+def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num_qubits: int, max_memory_gb: float, logger: logging.Logger):
+    """
+    Executes all seeds simultaneously on the A100.
+    Strictly free of PyRosetta objects and file I/O.
+    """
+    original_num_seeds = len(seed_versions)
+
+    bytes_per_state = (2 ** num_qubits) * 16
+    bytes_per_seed = 3 * bytes_per_state * 1.2
+    b_max = math.floor((max_memory_gb * (1024 ** 3)) / bytes_per_seed)
+    if b_max < 1:
+        raise MemoryError(f"Insufficient memory ({max_memory_gb}GB) to run even a single seed for {num_qubits} qubits.")
+
+    batch_size = min(b_max, original_num_seeds)
+    num_batches = math.ceil(original_num_seeds / batch_size)
+    padded_total_seeds = num_batches * batch_size
+
+    logger.debug(f"[VRAM Profiler] {num_qubits} Qubits | Batch Size: {batch_size} | Executing {num_batches} Chunks (Total Padded: {padded_total_seeds})")
+
+    master_key = jax.random.PRNGKey(seed_versions[0])
+    keys = jax.random.split(master_key, padded_total_seeds)
+
+    # 2. Initialize a batched parameter tensor of shape (30, 2, layers)
+    def init_params(key):
+        return jax.random.uniform(key, shape=(2, qaoa_params.layers), minval=-jnp.pi, maxval=jnp.pi)
+
+    optimizer = optax.adam(learning_rate=qaoa_params.optimiser_stepsize)
+
+    def single_update_step(params, opt_state_inner):
+        cost_val, grads = jax.value_and_grad(cost_function)(params)
+        updates, new_opt_state = optimizer.update(grads, opt_state_inner, params)
+        new_params = optax.apply_updates(params, updates)
+        return new_params, new_opt_state, cost_val
+
+
+    # 5. JIT-Compile the VMAP'd update step
+    # in_axes=(0, 0) means "vectorize over the first dimension of both inputs"
+    @jax.jit
+    def batched_update_step(params_batch, opt_state_batch):
+        return jax.vmap(single_update_step, in_axes=(0, 0))(params_batch, opt_state_batch)
+
+    @jax.jit
+    def batched_sample(params_batch):
+        return jax.vmap(sample_function)(params_batch)
+
+
+    all_final_probs = []
+    for b in range(num_batches):
+        logger.debug(f"[BATCH Tracker] Batch {b} / {num_batches}")
+        # Extract the PRNG keys for this specific chunk
+        chunk_keys = keys[b * batch_size: (b + 1) * batch_size]
+
+        # Initialize parameters and optimizer state for the chunk
+        current_params = jax.vmap(init_params)(chunk_keys)
+        current_opt_state = jax.vmap(optimizer.init)(current_params)
+
+        # Epoch Loop for this chunk
+        for epoch in range(qaoa_params.epochs):
+            current_params, current_opt_state, batched_costs = batched_update_step(current_params, current_opt_state)
+            if epoch % 10 == 0:
+                logger.debug(f"\t[EPOCH Tracker] Epoch  {epoch} | Cost: {batched_costs}")
+
+        # Sample the final probabilities
+        chunk_probs = batched_sample(current_params)
+        all_final_probs.append(chunk_probs)
+
+        # 5. Concatenate and Discard Padded Dummies
+        # jnp.vstack merges the chunks: (num_batches, batch_size, 2^N) -> (padded_total_seeds, 2^N)
+    combined_probs = jnp.vstack(all_final_probs)
+
+    return combined_probs[:original_num_seeds]

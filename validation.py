@@ -11,6 +11,7 @@ from misc import BasicParams
 
 @dataclass
 class Conformation:
+    idx: int
     bitstring: list[int]
     probability: np.float64
     quantum_energy: np.float64 | None
@@ -27,7 +28,7 @@ def validate_conformations(probabilities, params: BasicParams, logger: logging.L
     def int_to_bitstring(idx, length):
         return [int(x) for x in format(idx, f'0{length}b')]
 
-    top_indices = list(np.argsort(probabilities)[-TOP_CONFORMATION_COUNTS:][::-1])
+    top_indices = list(np.argsort(probabilities)[::-1])
 
     # 2. Enforce the One-Hot Constraint
     for idx in top_indices:
@@ -49,7 +50,7 @@ def validate_conformations(probabilities, params: BasicParams, logger: logging.L
 
         if is_valid:
             valid_conformations.append(
-                Conformation(bitstring,
+                Conformation(idx, bitstring,
                              probabilities[idx],
                              None, None
                              )

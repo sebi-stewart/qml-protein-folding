@@ -36,7 +36,7 @@ def extract_top_n_rotamers(base_pose: pyrosetta.Pose, logger: logging.Logger, n=
     # we will modify this to only take into account hyrogen interactions and
     logger.debug("Creating score function")
     scorefxn = get_fa_scorefxn()
-    base_pose = scorefxn(base_pose)
+    scorefxn(base_pose)
 
     logger.debug("Creating Repacking Task - Core Rotamer Optimisation Protocol")
 

@@ -1,6 +1,7 @@
 import logging
 import pathlib
 import pickle
+import time
 
 import numpy as np
 
@@ -15,7 +16,7 @@ from constants import IS_LINUX
 
 import pennylane as qml
 
-from qaoa.metrics import calculate_epsilon_success
+from qaoa.metrics import calculate_epsilon_success, extract_metrics_for_serialization
 from qaoa.objects import QAOAParams
 from qaoa.scoring import extract_lowest_energy_bitstrings
 
@@ -35,6 +36,7 @@ def main(h_linear, J_quadratic, qaoa_layers, artifact_path):
     max_memory_gb = 10 # ADJUST THIS BASED ON YOUR GPU CAPACITY
     seed_versions = list(range(30)) # ADJUST THIS BASED ON YOUR DESIRED NUMBER OF SEEDS
 
+    start_time = time.perf_counter()
     cost_func, sample_func = qaoa_func_generator(dev, cost_hamiltonian, ring_xy_mixer_layer, basic_params)
     final_probs, cost_history = batched_qaoa(cost_func, sample_func, qaoa_params, seed_versions, num_qubits, max_memory_gb, logger)
 
@@ -44,16 +46,21 @@ def main(h_linear, J_quadratic, qaoa_layers, artifact_path):
     )
 
     success_metric = calculate_epsilon_success(final_probs, target_indices)
+    target_probs, conf_prob_map, best_idx = extract_metrics_for_serialization(final_probs, target_indices, valid_conformations)
 
     np.savez(artifact_path,
              cost_history=cost_history,
-             final_probs=final_probs,
+
+             target_probs=target_probs,
 
              target_indices=target_indices,
-             valid_conformations=valid_conformations,
+             best_target_index=best_idx,
+             conformation_map=np.array(conf_prob_map, dtype=object)
+    )
 
-             success_metric=success_metric)
-    logger.debug(f"Saved results to {artifact_path}")
+    total_time_taken = time.perf_counter() - start_time
+    logger.info(f"Saved results to {artifact_path} - took {total_time_taken:.2f} seconds | avg. {total_time_taken/len(seed_versions):.3f} seconds over {len(seed_versions)} seeds")
+    logger.debug(f"Success Metric (P_success) per seed: {success_metric}")
 
 def load_qaoa_data(source_path):
     with open(source_path, 'rb') as f:

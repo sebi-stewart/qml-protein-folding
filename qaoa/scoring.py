@@ -15,9 +15,7 @@ import jax
 class Conformation:
     idx: int
     bitstring: list[int]
-    probability: np.float64 | None
-    qubo_energy: np.float64 | None
-    biological_energy: np.float64 | None
+    qubo_energy: np.float64
 
 @jax.jit
 def _evaluate_all_qubo_energies(X_matrix, h_dense, J_dense):
@@ -82,8 +80,6 @@ def extract_lowest_energy_bitstrings(h_linear, J_quadratic, logger, epsilon, par
             idx=int(indices[row_idx]),
             bitstring=X_matrix[row_idx].astype(int).tolist(),
             qubo_energy=np.float64(energies[row_idx]),
-            probability=None,
-            biological_energy=None
         ) for row_idx in winning_row_indices
     ]
 

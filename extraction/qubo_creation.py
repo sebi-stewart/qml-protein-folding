@@ -1,7 +1,7 @@
 import itertools
 from pyrosetta.rosetta.core.pack.interaction_graph import InteractionGraphFactory
 
-from rotamer_extraction import TrackedResidue
+from extraction.objects import TrackedResidue
 
 import numpy as np
 

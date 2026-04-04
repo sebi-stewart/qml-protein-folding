@@ -1,5 +1,5 @@
 import pennylane as qml
-from misc import BasicParams
+from qaoa.objects import BasicParams
 
 
 def qaoa_func_generator(dev, H_ising, mixer_layer, generator_params: BasicParams):

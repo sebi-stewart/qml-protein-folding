@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import pyrosetta
 
-from initialisation import initialize_rosetta
+from extraction.initialisation import initialize_rosetta
 
 from extraction.qubo_creation import extract_and_reduce_tensors
 from extraction.rotamers import extract_top_n_rotamers, load_5PTI_pose

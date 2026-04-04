@@ -5,10 +5,9 @@ import time
 
 import numpy as np
 
-from custom_qaoa import get_cached_device
-from h_mixer import ring_xy_mixer_layer
+from qaoa.devices import get_cached_device
+from qaoa.h_mixer import ring_xy_mixer_layer
 from logging_setup import setup_logging
-from misc import init_basic_params, BasicParams
 from qaoa.execution import batched_qaoa
 from qaoa.generators import qaoa_func_generator
 from qaoa.hamiltonians import extract_ising_items
@@ -17,14 +16,19 @@ from constants import IS_LINUX
 import pennylane as qml
 
 from qaoa.metrics import calculate_epsilon_success, extract_metrics_for_serialization
-from qaoa.objects import QAOAParams
+from qaoa.objects import QAOAParams, init_basic_params, BasicParams
 from qaoa.scoring import extract_lowest_energy_bitstrings
 
 
-def main(h_linear, J_quadratic, qaoa_layers, artifact_path):
+def load_qaoa_data(source_path):
+    with open(source_path, 'rb') as f:
+        energies = pickle.load(f)
+    return energies['one_body'], energies['two_body']
+
+def layered_run(h_linear, J_quadratic, qaoa_layers, artifact_path):
     basic_params: BasicParams = init_basic_params(h_linear)
 
-    logger = logging.getLogger("qaoa.main")
+    logger = logging.getLogger(f"qaoa.main.p_{qaoa_layers}")
     coeffs, observables, num_qubits = extract_ising_items(h_linear, J_quadratic, logger)
     cost_hamiltonian = qml.dot(coeffs, observables)
 
@@ -62,10 +66,15 @@ def main(h_linear, J_quadratic, qaoa_layers, artifact_path):
     logger.info(f"Saved results to {artifact_path} - took {total_time_taken:.2f} seconds | avg. {total_time_taken/len(seed_versions):.3f} seconds over {len(seed_versions)} seeds")
     logger.debug(f"Success Metric (P_success) per seed: {success_metric}")
 
-def load_qaoa_data(source_path):
-    with open(source_path, 'rb') as f:
-        energies = pickle.load(f)
-    return energies['one_body'], energies['two_body']
+def main(artifact_base_name):
+    # artifact_base_name = "5PTI_20_24_4"
+    one_body, two_body = load_qaoa_data(f"../extraction/energies/{artifact_base_name}.pkl")
+    qaoa_layer_tests = [1, 2, 4, 8, 12]
+
+    for layers in qaoa_layer_tests:
+        artifact_path = f"qaoa_results/{artifact_base_name}_{layers}_layers.npz"
+        layered_run(one_body, two_body, layers, artifact_path)
+
 
 if __name__ == '__main__':
     setup_logging("new_runs_qaoa")
@@ -74,7 +83,7 @@ if __name__ == '__main__':
 
     # Example usage - adjust paths and parameters as needed
     h_linear, J_quadratic = load_qaoa_data("../extraction/energies/5PTI_20_24_4.pkl")
-    main(h_linear, J_quadratic, qaoa_layers=3, artifact_path="qaoa_results/5PTI_qaoa_results.npz")
+    layered_run(h_linear, J_quadratic, qaoa_layers=3, artifact_path="qaoa_results/5PTI_qaoa_results.npz")
 
 
 

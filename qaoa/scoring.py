@@ -5,7 +5,7 @@ import numpy as np
 from dataclasses import dataclass
 
 from extraction.qubo_creation import build_dense_qubo
-from misc import BasicParams
+from qaoa.objects import BasicParams
 
 import jax.numpy as jnp
 import jax

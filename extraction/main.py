@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass
 import pickle
 import pathlib
+from collections.abc import Callable
 
 import pyrosetta
 
@@ -13,8 +14,8 @@ from logging_setup import setup_logging
 
 
 @dataclass
-class TestInstance:
-    pose_func: callable
+class ExtractionTestInstance:
+    pose_func: Callable[None, pyrosetta.Pose]
     test_name: str
     residue_start: int
     residue_end: int
@@ -22,13 +23,13 @@ class TestInstance:
 
 class TestInstanceFactory:
     @staticmethod
-    def create_test_instance(protein: str, start: int, end: int, rot_count: int) -> TestInstance:
+    def create_test_instance(protein: str, start: int, end: int, rot_count: int) -> ExtractionTestInstance:
         test_name = f"{protein}_{start}_{end}_{rot_count}"
 
         if protein == "5PTI": pose_func = load_5PTI_pose
         else: raise ValueError(f"Unknown protein: {protein}")
 
-        return TestInstance(
+        return ExtractionTestInstance(
             pose_func=pose_func,
             test_name=test_name,
             residue_start=start,
@@ -65,7 +66,7 @@ def save_results(one_body, two_body, logger, artifact_path):
     logger.info(f"Saved extracted tensors to {artifact_path}")
 
 
-def main(inst: TestInstance):
+def main(inst: ExtractionTestInstance):
     test_name = inst.test_name
     logger = logging.getLogger(f"extraction.{test_name}")
 

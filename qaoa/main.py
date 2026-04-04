@@ -1,5 +1,7 @@
 import logging
 
+import numpy as np
+
 from custom_qaoa import get_cached_device
 from h_mixer import ring_xy_mixer_layer
 from misc import init_basic_params, BasicParams
@@ -14,7 +16,8 @@ from qaoa.metrics import calculate_epsilon_success
 from qaoa.objects import QAOAParams
 from qaoa.scoring import extract_lowest_energy_bitstrings
 
-def main(h_linear, J_quadratic, qaoa_layers):
+
+def main(h_linear, J_quadratic, qaoa_layers, artifact_path):
     basic_params: BasicParams = init_basic_params(h_linear)
 
     logger = logging.getLogger("qaoa.main")
@@ -29,14 +32,29 @@ def main(h_linear, J_quadratic, qaoa_layers):
     max_memory_gb = 10 # ADJUST THIS BASED ON YOUR GPU CAPACITY
 
     cost_func, sample_func = qaoa_func_generator(dev, cost_hamiltonian, ring_xy_mixer_layer, basic_params)
-    batched_probs = batched_qaoa(cost_func, sample_func, qaoa_params, num_qubits, max_memory_gb, logger)
+    final_probs, cost_history = batched_qaoa(cost_func, sample_func, qaoa_params, num_qubits, max_memory_gb, logger)
 
     target_indices, valid_conformations = extract_lowest_energy_bitstrings(
         h_linear, J_quadratic,
         logger, 1e-6, basic_params
     )
 
-    success_metric = calculate_epsilon_success(batched_probs, target_indices, logger)
+    success_metric = calculate_epsilon_success(final_probs, target_indices, logger)
+
+    np.savez(artifact_path,
+             cost_history=cost_history,
+             final_probs=final_probs,
+
+             target_indices=target_indices,
+             valid_conformations=valid_conformations,
+
+             success_metric=success_metric)
+    logger.debug(f"Saved results to {artifact_path}")
+
+def load_qaoa_params():
+    source_path = "qaoa_input.npz"
+    artifact_path = "qaoa_results.npz"
+
 
 
 

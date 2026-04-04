@@ -3,6 +3,7 @@ import math
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 
 
@@ -53,6 +54,8 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
 
 
     all_final_probs = []
+    all_cost_histories = []
+
     for b in range(num_batches):
         logger.debug(f"[BATCH Tracker] Batch {b} / {num_batches}")
         # Extract the PRNG keys for this specific chunk
@@ -62,11 +65,18 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
         current_params = jax.vmap(init_params)(chunk_keys)
         current_opt_state = jax.vmap(optimizer.init)(current_params)
 
+        batch_cost_history = []
+
         # Epoch Loop for this chunk
         for epoch in range(qaoa_params.epochs):
             current_params, current_opt_state, batched_costs = batched_update_step(current_params, current_opt_state)
+            batch_cost_history.append(batched_costs)
             if epoch % 10 == 0:
-                logger.debug(f"\t[EPOCH Tracker] Epoch  {epoch} | Cost: {batched_costs}")
+                logger.debug(f"\t[EPOCH Tracker] Epoch  {epoch} | Cost: {np.mean(batched_costs):.4f}")
+
+        # Convert batch cost history to array: (batch_size, epochs)
+        batch_cost_history = jnp.stack(batch_cost_history, axis=1)
+        all_cost_histories.append(batch_cost_history)
 
         # Sample the final probabilities
         chunk_probs = batched_sample(current_params)
@@ -75,5 +85,6 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
         # 5. Concatenate and Discard Padded Dummies
         # jnp.vstack merges the chunks: (num_batches, batch_size, 2^N) -> (padded_total_seeds, 2^N)
     combined_probs = jnp.vstack(all_final_probs)
+    combined_costs = jnp.vstack(all_cost_histories)
 
-    return combined_probs[:original_num_seeds]
+    return combined_probs[:original_num_seeds], combined_costs[:original_num_seeds]

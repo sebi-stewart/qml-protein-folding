@@ -1,6 +1,5 @@
 import logging
 from dataclasses import dataclass
-import pickle
 import pathlib
 from collections.abc import Callable
 
@@ -10,12 +9,13 @@ from extraction.initialisation import initialize_rosetta
 
 from extraction.qubo_creation import extract_and_reduce_tensors
 from extraction.rotamers import extract_top_n_rotamers, load_5PTI_pose
+from extraction.saving import save_results, ENERGIES_SMALL, ENERGIES_LARGE, ENERGIES_TOO_LARGE
 from logging_setup import setup_logging
 
 
 @dataclass
 class ExtractionTestInstance:
-    pose_func: Callable[None, pyrosetta.Pose]
+    pose_func: Callable[[], pyrosetta.Pose]
     test_name: str
     residue_start: int
     residue_end: int
@@ -54,21 +54,9 @@ def from_energies_to_tensors(residue_library, ig):
     h_flex_linear, J_flex_quadratic, global_offset = extract_and_reduce_tensors(residue_library, ig)
     return h_flex_linear, J_flex_quadratic, global_offset
 
-
-def save_results(one_body, two_body, logger, artifact_path):
-    # Placeholder for the actual saving logic
-    with open(f"energies/{artifact_path}", 'wb') as f:
-        # noinspection PyTypeChecker
-        pickle.dump({
-            'one_body': one_body,
-            'two_body': two_body
-        }, f)
-    logger.info(f"Saved extracted tensors to {artifact_path}")
-
-
 def main(inst: ExtractionTestInstance):
     test_name = inst.test_name
-    logger = logging.getLogger(f"extraction.{test_name}")
+    logger = logging.getLogger(f"qaoa.{test_name}")
 
     pose, residue_library, ig, rot_sets, scorefxn = run_pyrosetta_obj_extraction(
         inst.pose_func,
@@ -79,15 +67,67 @@ def main(inst: ExtractionTestInstance):
 
     one_body, two_body, global_offset = from_energies_to_tensors(residue_library, ig)
 
-    save_results(one_body, two_body, logger, f"{test_name}.pkl")
+    return save_results(one_body, two_body, logger, f"{test_name}.pkl")
+
+def _setup_folders():
+    pathlib.Path(ENERGIES_SMALL).mkdir(exist_ok=True, parents=True)
+    pathlib.Path(ENERGIES_LARGE).mkdir(exist_ok=True, parents=True)
+
+def setup_extraction():
+    setup_logging("new_runs_qaoa")
+    _setup_folders()
+    initialize_rosetta(pyrosetta, extra_flags="-mute all")
+
+    return TestInstanceFactory()
 
 if __name__ == '__main__':
-    setup_logging("new_runs_qaoa")
+    logger = logging.getLogger("qaoa.main")
+    fac = setup_extraction()
 
-    initialize_rosetta(pyrosetta, extra_flags="-mute all")
-    factory = TestInstanceFactory()
+    test_instances = [
+        fac.create_test_instance("5PTI", 18, 22, 4),
+        fac.create_test_instance("5PTI", 18, 22, 5),
+        fac.create_test_instance("5PTI", 19, 23, 4),
+        fac.create_test_instance("5PTI", 19, 23, 5),
+        fac.create_test_instance("5PTI", 20, 24, 4),
+        fac.create_test_instance("5PTI", 20, 24, 5),
+        fac.create_test_instance("5PTI", 21, 25, 4),
+        fac.create_test_instance("5PTI", 21, 25, 5),
+        fac.create_test_instance("5PTI", 22, 26, 4),
+        fac.create_test_instance("5PTI", 22, 26, 5),
 
-    pathlib.Path("energies").mkdir(exist_ok=True)
+        fac.create_test_instance("5PTI", 18, 23, 4),
+        fac.create_test_instance("5PTI", 18, 23, 5),
+        fac.create_test_instance("5PTI", 19, 24, 4),
+        fac.create_test_instance("5PTI", 19, 24, 5),
+        fac.create_test_instance("5PTI", 20, 25, 4),
+        fac.create_test_instance("5PTI", 20, 25, 5),
+        fac.create_test_instance("5PTI", 21, 26, 4),
+        fac.create_test_instance("5PTI", 21, 26, 5),
+        fac.create_test_instance("5PTI", 22, 27, 4),
+        fac.create_test_instance("5PTI", 22, 27, 5),
 
-    main(factory.create_test_instance("5PTI", 20, 24, 4))
+        fac.create_test_instance("5PTI", 18, 24, 4),
+        fac.create_test_instance("5PTI", 18, 24, 5),
+        fac.create_test_instance("5PTI", 19, 25, 4),
+        fac.create_test_instance("5PTI", 19, 25, 5),
+        fac.create_test_instance("5PTI", 20, 26, 4),
+        fac.create_test_instance("5PTI", 20, 26, 5),
+        fac.create_test_instance("5PTI", 21, 27, 4),
+        fac.create_test_instance("5PTI", 21, 27, 5),
+        fac.create_test_instance("5PTI", 22, 28, 4),
+        fac.create_test_instance("5PTI", 22, 28, 5),
+    ]
+
+
+    for inst in test_instances:
+        file_location = main(inst)
+        logger.info(f"Completed extraction for {inst.test_name} - saved to {file_location}")
+
+    small_files = list(pathlib.Path(ENERGIES_SMALL).glob("*.pkl"))
+    large_files = list(pathlib.Path(ENERGIES_LARGE).glob("*.pkl"))
+    too_large = list(pathlib.Path(ENERGIES_TOO_LARGE).glob("*.pkl"))
+
+    logger.info(f"Extraction complete. {len(small_files)} small files and {len(large_files)} large files saved.")
+    logger.warning(f"{len(too_large)} files were categorized as too large for the current saving scheme and may require special handling.")
 

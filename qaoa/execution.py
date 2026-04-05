@@ -6,21 +6,22 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-
-def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num_qubits: int, max_memory_gb: float, logger: logging.Logger):
-    """
-    Executes all seeds simultaneously on the A100.
-    Strictly free of PyRosetta objects and file I/O.
-    """
-    original_num_seeds = len(seed_versions)
-
+def _retrieve_batch_size(num_qubits: int, max_memory_gb: float, original_num_seeds: int):
     bytes_per_state = (2 ** num_qubits) * 16
     bytes_per_seed = 3 * bytes_per_state * 1.2
     b_max = math.floor((max_memory_gb * (1024 ** 3)) / bytes_per_seed)
     if b_max < 1:
         raise MemoryError(f"Insufficient memory ({max_memory_gb}GB) to run even a single seed for {num_qubits} qubits.")
 
-    batch_size = min(b_max, original_num_seeds)
+    return min(b_max, original_num_seeds)
+
+def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num_qubits: int, max_memory_gb: float, logger: logging.Logger, previous_params=None):
+    """
+    Executes all seeds simultaneously
+    Strictly free of PyRosetta objects and file I/O.
+    """
+    original_num_seeds = len(seed_versions)
+    batch_size = _retrieve_batch_size(num_qubits, max_memory_gb, original_num_seeds)
     num_batches = math.ceil(original_num_seeds / batch_size)
     padded_total_seeds = num_batches * batch_size
 
@@ -28,6 +29,25 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
 
     master_key = jax.random.PRNGKey(seed_versions[0])
     keys = jax.random.split(master_key, padded_total_seeds)
+
+    # --- WARM START LOGIC: Handle padding and noise globally before the batch loop ---
+    # if previous_params is not None:
+    #     prev_layers = previous_params.shape[2]
+    #     new_layers = qaoa_params.layers - prev_layers
+    #
+    #     if new_layers > 0:
+    #         # 1. Pad the existing parameters with zeros for the new layers
+    #         # Shape transitions from (batch, 2, prev_layers) to (batch, 2, prev_layers + new_layers)
+    #         padded_params = jnp.pad(previous_params, ((0, 0), (0, 0), (0, new_layers)))
+    #
+    #         # 2. Generate tiny noise for the new layers to break symmetry
+    #         noise_key = jax.random.PRNGKey(seed_versions[0] + qaoa_params.layers)
+    #         noise = jax.random.normal(noise_key, shape=(padded_total_seeds, 2, new_layers)) * 1e-4
+    #
+    #         # 3. Add noise ONLY to the newly added layers
+    #         padded_params = padded_params.at[:, :, prev_layers:].add(noise)
+    #     else:
+    #         padded_params = previous_params
 
     # 2. Initialize a batched parameter tensor of shape (30, 2, layers)
     def init_params(key):
@@ -55,6 +75,7 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
 
     all_final_probs = []
     all_cost_histories = []
+    all_optimized_params = []  # Store the updated parameters to return
 
     for b in range(num_batches):
         logger.debug(f"[BATCH Tracker] Batch {b} / {num_batches}")
@@ -62,7 +83,13 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
         chunk_keys = keys[b * batch_size: (b + 1) * batch_size]
 
         # Initialize parameters and optimizer state for the chunk
+        # --- INITIALIZATION DECISION: Cold Start vs Warm Start ---
+        # if previous_params is None:
         current_params = jax.vmap(init_params)(chunk_keys)
+        # else:
+        #     # Slice the pre-padded warm-started parameters for this specific batch chunk
+        #     current_params = padded_params[b * batch_size: (b + 1) * batch_size]
+
         current_opt_state = jax.vmap(optimizer.init)(current_params)
 
         batch_cost_history = []
@@ -82,9 +109,13 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
         chunk_probs = batched_sample(current_params)
         all_final_probs.append(chunk_probs)
 
-        # 5. Concatenate and Discard Padded Dummies
-        # jnp.vstack merges the chunks: (num_batches, batch_size, 2^N) -> (padded_total_seeds, 2^N)
+        # Save optimized parameters for this chunk
+        all_optimized_params.append(current_params)
+
+    # 5. Concatenate and Discard Padded Dummies
+    # jnp.vstack merges the chunks: (num_batches, batch_size, 2^N) -> (padded_total_seeds, 2^N)
     combined_probs = jnp.vstack(all_final_probs)
     combined_costs = jnp.vstack(all_cost_histories)
+    combined_params = jnp.vstack(all_optimized_params)
 
-    return combined_probs[:original_num_seeds], combined_costs[:original_num_seeds]
+    return combined_probs[:original_num_seeds], combined_costs[:original_num_seeds], combined_params[:original_num_seeds]

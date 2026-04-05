@@ -36,5 +36,7 @@ def setup_logging(log_dir_base: str):
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
-    logger.info("Logging initialized. Application logs are isolated from JAX.")
-    logger.debug("This debug message will only appear in the file.")
+    logger.info("Logging initialized. Application logs are isolated from JAX.\n")
+    logger.debug("This debug message will only appear in the file.\n")
+
+    return logger

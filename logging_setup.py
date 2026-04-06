@@ -3,9 +3,9 @@ import sys
 from pathlib import Path
 
 
-def setup_logging(log_dir_base: str):
+def setup_logging(log_dir_base: str, log_file: str = "myapp") -> logging.Logger:
     log_dir = Path.cwd().joinpath(log_dir_base)
-    log_path = log_dir.joinpath("myapp.log")
+    log_path = log_dir.joinpath(f"{log_file}.log")
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Reset root logger and set it to WARNING to silence JAX/libraries

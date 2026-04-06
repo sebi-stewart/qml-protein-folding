@@ -19,6 +19,9 @@ from qaoa.metrics import calculate_epsilon_success, extract_metrics_for_serializ
 from qaoa.objects import QAOAParams, init_basic_params, BasicParams
 from qaoa.scoring import extract_lowest_energy_bitstrings
 
+import jax
+jax.config.update("jax_enable_x64", True)
+
 BASE_EPOCHS = 150
 BASE_STEPSIZE = 0.01
 
@@ -28,16 +31,18 @@ def load_qaoa_data(source_path):
     return energies['one_body'], energies['two_body']
 
 def layered_run(cost_func, sample_func, target_indices, valid_conformations, num_qubits, qaoa_layers, result_path, previous_params=None):
+    # previous_params=None
     logger = logging.getLogger(f"qaoa.main.p_{qaoa_layers}")
-    logger.info(f"Starting layered QAOA run with {qaoa_layers} layers for {num_qubits} qubits")
 
-    qaoa_params = QAOAParams(layers=qaoa_layers, optimiser_stepsize=BASE_STEPSIZE, epochs=BASE_EPOCHS) #if previous_params is None else (
-        # QAOAParams(layers=qaoa_layers, optimiser_stepsize=BASE_STEPSIZE/10, epochs=BASE_EPOCHS//2))
+    qaoa_params = QAOAParams(layers=qaoa_layers, optimiser_stepsize=BASE_STEPSIZE, epochs=BASE_EPOCHS) if previous_params is None else (
+        QAOAParams(layers=qaoa_layers, optimiser_stepsize=BASE_STEPSIZE/10, epochs=BASE_EPOCHS))
+    logger.info(f"Starting layered QAOA for {num_qubits} qubits with parameters: {qaoa_params}")
+
     max_memory_gb = 10 # ADJUST THIS BASED ON YOUR GPU CAPACITY
     seed_versions = list(range(30)) # ADJUST THIS BASED ON YOUR DESIRED NUMBER OF SEEDS
 
     start_time = time.perf_counter()
-    final_probs, cost_history, optimized_params = batched_qaoa(cost_func, sample_func, qaoa_params, seed_versions, num_qubits, max_memory_gb, logger, previous_params=None)
+    final_probs, cost_history, optimized_params = batched_qaoa(cost_func, sample_func, qaoa_params, seed_versions, num_qubits, max_memory_gb, logger, previous_params=previous_params)
 
     success_metric = calculate_epsilon_success(final_probs, target_indices)
     target_probs, conf_prob_map, best_idx = extract_metrics_for_serialization(final_probs, target_indices, valid_conformations)
@@ -71,7 +76,7 @@ def main(file_path, logger, results_dir):
 
     device_type = 'lightning.gpu' if IS_LINUX else 'lightning.qubit'
     dev = get_cached_device(num_qubits, device_type)
-    logger.debug(f"Running on {device_type} for {num_qubits} qubits")
+    logger.info(f"Running on {device_type} for {num_qubits} qubits")
 
     cost_func, sample_func = qaoa_func_generator(dev, cost_hamiltonian, ring_xy_mixer_layer, basic_params)
     target_indices, valid_conformations = extract_lowest_energy_bitstrings(
@@ -79,7 +84,7 @@ def main(file_path, logger, results_dir):
         logger, 1.5, basic_params
     )
 
-    qaoa_layer_tests = [1, 2, 4, 8, 12]
+    qaoa_layer_tests = [2, 4, 6, 8, 12]
     cached_params = None
 
     for layers in qaoa_layer_tests:
@@ -88,15 +93,19 @@ def main(file_path, logger, results_dir):
 
 
 if __name__ == '__main__':
-    results_dir = "qaoa_results_4"
-    logger = setup_logging("new_runs_qaoa")
+    results_dir = "qaoa_results_9_warm_start_at_2"
+    logger = setup_logging("new_runs_qaoa", "warm_start_at_2")
     pathlib.Path(results_dir).mkdir(exist_ok=True)
 
 
 
     # Example usage - adjust paths and parameters as needed
     energy_files = list(pathlib.Path("energies/small").glob("*.pkl"))
+    first = False
     for energy_file in energy_files:
+        # if not first:
+        #     first = True
+        #     continue
         logger.info(f"Starting QAOA runs for {energy_file.name}")
         start = time.perf_counter()
         main(energy_file.as_posix(), logger, results_dir)

@@ -93,25 +93,58 @@ def main(file_path, logger, results_dir):
 
 
 if __name__ == '__main__':
-    results_dir = "qaoa_results_9_warm_start_at_2"
-    logger = setup_logging("new_runs_qaoa", "warm_start_at_2")
+    results_dir = "qaoa_results_11_by_qubit_counts"
+    logger = setup_logging("new_runs_qaoa", "by_qubit_counts-from7")
     pathlib.Path(results_dir).mkdir(exist_ok=True)
 
+    # Run QAOA for these qubit counts
+    qubit_counts = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    limit_files_per_qubit = 5 # Adjust this to limit the number of files processed per qubit count
+    start_file_idx = 0
+    all_energy_files = {num_qubits: list(pathlib.Path(f"../extraction/alt_energies/{num_qubits}").glob("*.pkl"))for num_qubits in qubit_counts}
+    # Limit the number of files processed per qubit count to manage total runtime
+    energy_files = {num_qubits: [] for num_qubits in qubit_counts}
+    for num_qubits, files in all_energy_files.items():
+        if start_file_idx > len(files): continue
+
+        if start_file_idx + limit_files_per_qubit > len(files):
+            logger.warning(f"Requested start index {start_file_idx} + limit {limit_files_per_qubit} exceeds available files {len(files)} for {num_qubits} qubits - adjusting to process remaining files")
+            energy_files[num_qubits] = files[start_file_idx:]
+        else:
+            energy_files[num_qubits] = files[start_file_idx:start_file_idx+limit_files_per_qubit]
+            logger.info(f"Limiting {num_qubits} qubits from {len(files)} files to {limit_files_per_qubit} files for processing")
+
+    # Assume exponential time increase, 1.5x per additional qubit as a rough estimate, and adjust the order of processing accordingly
+    total_processing_estimate = sum(len(files) * (20 * (1.4 ** num_qubits)) for num_qubits, files in energy_files.items())
+    current_processed = 0
+
+
+    for qubit_count in reversed(qubit_counts): # high to low
+        cur_energy_files = energy_files[qubit_count]
+        logger.info(f"Processing {len(cur_energy_files)} files for {qubit_count} qubits")
+        for energy_file in cur_energy_files:
+            logger.info(f"Starting QAOA runs for {energy_file.name}")
+            start = time.perf_counter()
+            main(energy_file.as_posix(), logger, results_dir)
+            elapsed = time.perf_counter() - start
+
+            current_processed += (20 * (1.4 ** qubit_count))
+            logger.info(f"Completed QAOA runs for {energy_file.name} in {elapsed:.2f} seconds - completed {current_processed/total_processing_estimate*100:.3f}% of estimated total processing time\n")
 
 
     # Example usage - adjust paths and parameters as needed
-    energy_files = list(pathlib.Path("energies/small").glob("*.pkl"))
-    first = False
-    for energy_file in energy_files:
-        # if not first:
-        #     first = True
-        #     continue
-        logger.info(f"Starting QAOA runs for {energy_file.name}")
-        start = time.perf_counter()
-        main(energy_file.as_posix(), logger, results_dir)
-        elapsed = time.perf_counter() - start
-
-        logger.info(f"Completed QAOA runs for {energy_file.name} in {elapsed:.2f} seconds\n")
+    # energy_files = list(pathlib.Path("energies/small").glob("*.pkl"))
+    # first = False
+    # for energy_file in energy_files:
+    #     # if not first:
+    #     #     first = True
+    #     #     continue
+    #     logger.info(f"Starting QAOA runs for {energy_file.name}")
+    #     start = time.perf_counter()
+    #     main(energy_file.as_posix(), logger, results_dir)
+    #     elapsed = time.perf_counter() - start
+    #
+    #     logger.info(f"Completed QAOA runs for {energy_file.name} in {elapsed:.2f} seconds\n")
 
 
 

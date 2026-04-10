@@ -2,7 +2,7 @@ import pathlib
 from collections import defaultdict
 import pandas as pd
 
-log_files = pathlib.Path("qaoa/new_runs_qaoa").glob("*.log")
+log_files = pathlib.Path("qaoa/new_runs_qaoa").glob("by_qubit_counts*")
 
 runtimes = defaultdict(list)
 
@@ -33,7 +33,7 @@ for log_file in log_files:
 
                     layer_count = sum(list(cur_qaoa_layers))
 
-                    stripped_line = line.strip()
+                    stripped_line = line.strip().split("-")[1].strip()
                     parts = stripped_line.split(" ")
                     time_part = parts[-2] if len(parts) >= 2 else None
                     if time_part:
@@ -68,4 +68,4 @@ for qubits, tup in sorted(runtimes.items()):
         data.append({"Qubits": qubits, "Total Layers": layer_count, "Time (s)": time})
 df = pd.DataFrame(data)
 print(df)
-df.to_pickle("qaoa_runtimes.pkl")
+df.to_pickle("qaoa_runtimes2.pkl")

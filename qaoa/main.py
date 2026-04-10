@@ -93,14 +93,14 @@ def main(file_path, logger, results_dir):
 
 
 if __name__ == '__main__':
-    results_dir = "qaoa_results_11_by_qubit_counts"
-    logger = setup_logging("new_runs_qaoa", "by_qubit_counts-from7")
+    results_dir = "qaoa_results_12_by_qubit_counts"
+    logger = setup_logging("new_runs_qaoa", "by_qubit_counts-2")
     pathlib.Path(results_dir).mkdir(exist_ok=True)
 
     # Run QAOA for these qubit counts
     qubit_counts = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
     limit_files_per_qubit = 5 # Adjust this to limit the number of files processed per qubit count
-    start_file_idx = 0
+    start_file_idx = 5
     all_energy_files = {num_qubits: list(pathlib.Path(f"../extraction/alt_energies/{num_qubits}").glob("*.pkl"))for num_qubits in qubit_counts}
     # Limit the number of files processed per qubit count to manage total runtime
     energy_files = {num_qubits: [] for num_qubits in qubit_counts}
@@ -115,7 +115,11 @@ if __name__ == '__main__':
             logger.info(f"Limiting {num_qubits} qubits from {len(files)} files to {limit_files_per_qubit} files for processing")
 
     # Assume exponential time increase, 1.5x per additional qubit as a rough estimate, and adjust the order of processing accordingly
-    total_processing_estimate = sum(len(files) * (20 * (1.4 ** num_qubits)) for num_qubits, files in energy_files.items())
+    multiplicative_factor = 20
+    exponential_factor = 1.41
+    additive_factor = 50
+
+    total_processing_estimate = sum(len(files) * (additive_factor + multiplicative_factor * (exponential_factor ** num_qubits)) for num_qubits, files in energy_files.items())
     current_processed = 0
 
 
@@ -128,7 +132,7 @@ if __name__ == '__main__':
             main(energy_file.as_posix(), logger, results_dir)
             elapsed = time.perf_counter() - start
 
-            current_processed += (20 * (1.4 ** qubit_count))
+            current_processed += additive_factor + (multiplicative_factor * (exponential_factor ** qubit_count))
             logger.info(f"Completed QAOA runs for {energy_file.name} in {elapsed:.2f} seconds - completed {current_processed/total_processing_estimate*100:.3f}% of estimated total processing time\n")
 
 

@@ -93,12 +93,12 @@ def main(file_path, logger, results_dir):
 
 
 if __name__ == '__main__':
-    results_dir = "qaoa_results_12_by_qubit_counts"
-    logger = setup_logging("new_runs_qaoa", "by_qubit_counts-2")
+    results_dir = "qaoa_only_10_no_batching"
+    logger = setup_logging("new_runs_qaoa", "No_batching_10_qubits")
     pathlib.Path(results_dir).mkdir(exist_ok=True)
 
     # Run QAOA for these qubit counts
-    qubit_counts = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    qubit_counts = [10]
     limit_files_per_qubit = 5 # Adjust this to limit the number of files processed per qubit count
     start_file_idx = 5
     all_energy_files = {num_qubits: list(pathlib.Path(f"../extraction/alt_energies/{num_qubits}").glob("*.pkl"))for num_qubits in qubit_counts}

@@ -1,58 +1,24 @@
 import logging
-import math
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import optax
 
 EARLY_STOPPING_PATIENCE = 10
 EARLY_STOPPING_DELTA = 1e-4
 
-def _retrieve_batch_size(num_qubits: int, max_memory_gb: float, original_num_seeds: int):
-    bytes_per_state = (2 ** num_qubits) * 16
-    bytes_per_seed = 3 * bytes_per_state * 1.2
-    b_max = math.floor((max_memory_gb * (1024 ** 3)) / bytes_per_seed)
-    if b_max < 1:
-        raise MemoryError(f"Insufficient memory ({max_memory_gb}GB) to run even a single seed for {num_qubits} qubits.")
-
-    return min(b_max, original_num_seeds)
-
 def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num_qubits: int, max_memory_gb: float, logger: logging.Logger, previous_params=None):
     """
-    Executes all seeds simultaneously
+    Executes seeds sequentially (no batching).
     Strictly free of PyRosetta objects and file I/O.
+    Returns results in the same format as the batched version.
     """
     original_num_seeds = len(seed_versions)
-    batch_size = _retrieve_batch_size(num_qubits, max_memory_gb, original_num_seeds)
-    num_batches = math.ceil(original_num_seeds / batch_size)
-    padded_total_seeds = num_batches * batch_size
-
-    logger.debug(f"[VRAM Profiler] {num_qubits} Qubits | Batch Size: {batch_size} | Executing {num_batches} Chunks (Total Padded: {padded_total_seeds})")
+    logger.debug(f"[Sequential Execution] Running {original_num_seeds} seeds sequentially")
 
     master_key = jax.random.PRNGKey(seed_versions[0])
-    keys = jax.random.split(master_key, padded_total_seeds)
+    keys = jax.random.split(master_key, original_num_seeds)
 
-    # --- WARM START LOGIC: Handle padding and noise globally before the batch loop ---
-    if previous_params is not None:
-        prev_layers = previous_params.shape[2]
-        new_layers = qaoa_params.layers - prev_layers
-
-        if new_layers > 0:
-            # 1. Pad the existing parameters with zeros for the new layers
-            # Shape transitions from (batch, 2, prev_layers) to (batch, 2, prev_layers + new_layers)
-            padded_params = jnp.pad(previous_params, ((0, 0), (0, 0), (0, new_layers)))
-
-            # 2. Generate tiny noise for the new layers to break symmetry
-            noise_key = jax.random.PRNGKey(seed_versions[0] + qaoa_params.layers)
-            noise = jax.random.normal(noise_key, shape=(padded_total_seeds, 2, new_layers)) * 1e-4
-
-            # 3. Add noise ONLY to the newly added layers
-            padded_params = padded_params.at[:, :, prev_layers:].add(noise)
-        else:
-            padded_params = previous_params
-
-    # 2. Initialize a batched parameter tensor of shape (30, 2, layers)
     def init_params(key):
         return jax.random.uniform(key, shape=(2, qaoa_params.layers), minval=-jnp.pi, maxval=jnp.pi)
 
@@ -72,82 +38,99 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
 
         return final_params, new_opt_state, cost_val
 
-
-    # 5. JIT-Compile the VMAP'd update step
-    # in_axes=(0, 0) means "vectorize over the first dimension of both inputs"
-    @jax.jit
-    def batched_update_step(params_batch, opt_state_batch, converged_mask):
-        return jax.vmap(single_update_step, in_axes=(0, 0, 0))(
-            params_batch,
-            opt_state_batch,
-            converged_mask
-        )
-
-    @jax.jit
-    def batched_sample(params_batch):
-        return jax.vmap(sample_function)(params_batch)
-
-
     all_final_probs = []
     all_cost_histories = []
-    all_optimized_params = []  # Store the updated parameters to return
+    all_optimized_params = []
+    max_epochs_seen = 0
 
-    for b in range(num_batches):
-        logger.debug(f"[BATCH Tracker] Batch {b+1} / {num_batches}")
-        # Extract the PRNG keys for this specific chunk
-        chunk_keys = keys[b * batch_size: (b + 1) * batch_size]
+    # Sequential loop through seeds
+    for seed_idx in range(original_num_seeds):
+        logger.debug(f"[Seed Tracker] Seed {seed_idx+1} / {original_num_seeds}")
 
-        # Initialize parameters and optimizer state for the chunk
         # --- INITIALIZATION DECISION: Cold Start vs Warm Start ---
         if previous_params is None:
-            current_params = jax.vmap(init_params)(chunk_keys)
+            current_params = init_params(keys[seed_idx])
         else:
-            # Slice the pre-padded warm-started parameters for this specific batch chunk
-            current_params = padded_params[b * batch_size: (b + 1) * batch_size]
+            # Warm start: use previous parameters with optional padding and noise
+            if seed_idx < previous_params.shape[0]:
+                prev_layers = previous_params.shape[2]
+                new_layers = qaoa_params.layers - prev_layers
 
-        current_opt_state = jax.vmap(optimizer.init)(current_params)
+                if new_layers > 0:
+                    # Pad the existing parameters with zeros for the new layers
+                    current_params = jnp.pad(previous_params[seed_idx], ((0, 0), (0, new_layers)))
 
-        batch_cost_history = []
-        best_costs = jnp.full(batch_size, jnp.inf)
-        patience_counters = jnp.zeros(batch_size, dtype=jnp.int32)
-        converged_mask = jnp.zeros(batch_size, dtype=jnp.bool_)
+                    # Generate tiny noise for the new layers to break symmetry
+                    noise_key = jax.random.PRNGKey(seed_versions[seed_idx] + qaoa_params.layers)
+                    noise = jax.random.normal(noise_key, shape=(2, new_layers)) * 1e-4
 
-        # Epoch Loop for this chunk
+                    # Add noise ONLY to the newly added layers
+                    current_params = current_params.at[:, prev_layers:].add(noise)
+                else:
+                    current_params = previous_params[seed_idx]
+            else:
+                current_params = init_params(keys[seed_idx])
+
+        current_opt_state = optimizer.init(current_params)
+
+        cost_history = []
+        best_cost = jnp.inf
+        patience_counter = 0
+        is_converged = False
+        cost_val = jnp.inf  # Initialize for tracking final cost
+
+        # Epoch loop for this seed
         for epoch in range(qaoa_params.epochs):
-            current_params, current_opt_state, batched_costs = batched_update_step(
+            current_params, current_opt_state, cost_val = single_update_step(
                 current_params,
                 current_opt_state,
-                converged_mask
+                is_converged
             )
-            batch_cost_history.append(batched_costs)
+            cost_history.append(float(cost_val))
+
             if epoch % 10 == 0:
-                logger.debug(f"\t[EPOCH Tracker] Epoch  {epoch} | Cost: {np.mean(batched_costs):.4f} | Stopped Seeds: {jnp.sum(converged_mask)} / {batch_size}")
+                logger.debug(f"\t[Epoch Tracker] Epoch {epoch} | Cost: {float(cost_val):.4f} | Converged: {is_converged}")
 
-            improved = (best_costs - batched_costs) > EARLY_STOPPING_DELTA
+            # Check for improvement
+            if (best_cost - float(cost_val)) > EARLY_STOPPING_DELTA:
+                best_cost = float(cost_val)
+                patience_counter = 0
+            else:
+                patience_counter += 1
 
-            best_costs = jnp.where(improved, batched_costs, best_costs)
-            patience_counters = jnp.where(improved, 0, patience_counters + 1)
-            converged_mask = patience_counters >= EARLY_STOPPING_PATIENCE
-            if jnp.all(converged_mask):
-                logger.debug(f"\t[EPOCH Tracker] Early stopping triggered at epoch {epoch} for all seeds in this batch.")
+            # Early stopping
+            if patience_counter >= EARLY_STOPPING_PATIENCE:
+                logger.debug(f"\t[Epoch Tracker] Early stopping triggered at epoch {epoch}")
+                is_converged = True
                 break
 
-        # Convert batch cost history to array: (batch_size, epochs)
-        logger.info(f"\t[EPOCH Tracker] Completed Epochs for Batch {b+1} - Final Cost: {np.mean(batched_costs):.4f}")
-        batch_cost_history = jnp.stack(batch_cost_history, axis=1)
-        all_cost_histories.append(batch_cost_history)
+        logger.info(f"\t[Epoch Tracker] Completed Epochs for Seed {seed_idx+1} - Final Cost: {float(cost_val):.4f}")
+        
+        # Track maximum epochs for padding
+        max_epochs_seen = max(max_epochs_seen, len(cost_history))
+        cost_history = jnp.array(cost_history)
+        all_cost_histories.append(cost_history)
 
         # Sample the final probabilities
-        chunk_probs = batched_sample(current_params)
-        all_final_probs.append(chunk_probs)
+        probs = sample_function(current_params)
+        all_final_probs.append(probs)
 
-        # Save optimized parameters for this chunk
+        # Save optimized parameters for this seed
         all_optimized_params.append(current_params)
 
-    # 5. Concatenate and Discard Padded Dummies
-    # jnp.vstack merges the chunks: (num_batches, batch_size, 2^N) -> (padded_total_seeds, 2^N)
-    combined_probs = jnp.vstack(all_final_probs)
-    combined_costs = jnp.vstack(all_cost_histories)
-    combined_params = jnp.vstack(all_optimized_params)
+    # Pad all cost histories to the same length (max_epochs_seen) for consistent array shape
+    padded_cost_histories = []
+    for cost_hist in all_cost_histories:
+        if len(cost_hist) < max_epochs_seen:
+            # Pad with the last value to maintain shape consistency
+            padded = jnp.pad(cost_hist, (0, max_epochs_seen - len(cost_hist)), mode='edge')
+        else:
+            padded = cost_hist
+        padded_cost_histories.append(padded)
 
-    return combined_probs[:original_num_seeds], combined_costs[:original_num_seeds], combined_params[:original_num_seeds]
+    # Stack results to match original output format
+    combined_probs = jnp.stack(all_final_probs, axis=0)  # (num_seeds, 2^N)
+    combined_costs = jnp.stack(padded_cost_histories, axis=0)  # (num_seeds, max_epochs)
+    combined_params = jnp.stack(all_optimized_params, axis=0)  # (num_seeds, 2, layers)
+
+    return combined_probs, combined_costs, combined_params

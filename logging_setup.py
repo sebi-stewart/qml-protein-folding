@@ -17,6 +17,9 @@ def setup_logging(log_dir_base: str, log_file: str = "myapp") -> logging.Logger:
 
     # 2. Create a dedicated logger for your application code
     logger = logging.getLogger("qaoa")
+    if logger.handlers:
+        for handler in logger.handlers[:]:
+            logger.removeHandler(handler)
     logger.setLevel(logging.DEBUG)
     logger.propagate = False  # Prevent messages from reaching the noisy root logger
 

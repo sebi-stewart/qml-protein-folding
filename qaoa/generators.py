@@ -3,7 +3,7 @@ import pennylane as qml
 from qaoa.objects import BasicParams
 
 
-def qaoa_func_generator(dev, H_ising, mixer_layer, generator_params: BasicParams):
+def qaoa_func_generator(dev, H_ising, mixer_layer, generator_params: BasicParams, disable_adjoint: bool = False):
     num_qubits = generator_params.num_qubits
     wire_offsets = generator_params.wire_offsets
     seq_positions = generator_params.seq_positions
@@ -28,7 +28,19 @@ def qaoa_func_generator(dev, H_ising, mixer_layer, generator_params: BasicParams
             qml.StatePrep(state_vector, wires=bundle_wires)
 
     @qml.qnode(dev, interface="jax", diff_method="adjoint")
-    def cost_function(params):
+    def adjoint_enabled_cost_function(params):
+        gammas = params[0]
+        betas = params[1]
+
+        qaoa_init_layer()
+        for i in range(len(gammas)):
+            qaoa_layer(gammas[i], betas[i])
+
+        # 3. Measure the expectation value of the cost Hamiltonian
+        return qml.expval(H_ising)
+
+    @qml.qnode(dev, interface="jax")
+    def adjoint_disabled_cost_function(params):
         gammas = params[0]
         betas = params[1]
 
@@ -50,4 +62,8 @@ def qaoa_func_generator(dev, H_ising, mixer_layer, generator_params: BasicParams
 
         return qml.probs(wires=range(num_qubits))
 
-    return cost_function, sample_function
+
+    if disable_adjoint:
+        return adjoint_disabled_cost_function, sample_function
+    else:
+        return adjoint_enabled_cost_function, sample_function

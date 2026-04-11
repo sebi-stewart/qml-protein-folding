@@ -99,10 +99,10 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
                 patience_counter += 1
 
             # Early stopping
-            if patience_counter >= EARLY_STOPPING_PATIENCE:
-                logger.debug(f"\t[Epoch Tracker] Early stopping triggered at epoch {epoch}")
-                is_converged = True
-                break
+            # if patience_counter >= EARLY_STOPPING_PATIENCE:
+            #     logger.debug(f"\t[Epoch Tracker] Early stopping triggered at epoch {epoch}")
+            #     is_converged = True
+            #     break
 
         logger.info(f"\t[Epoch Tracker] Completed Epochs for Seed {seed_idx+1} - Final Cost: {float(cost_val):.4f}")
         

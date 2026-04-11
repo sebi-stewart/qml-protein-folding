@@ -34,8 +34,8 @@ def layered_run(cost_func, sample_func, target_indices, valid_conformations, num
     # previous_params=None
     logger = logging.getLogger(f"qaoa.main.p_{qaoa_layers}")
 
-    qaoa_params = QAOAParams(layers=qaoa_layers, optimiser_stepsize=BASE_STEPSIZE, epochs=BASE_EPOCHS) if previous_params is None else (
-        QAOAParams(layers=qaoa_layers, optimiser_stepsize=BASE_STEPSIZE/10, epochs=BASE_EPOCHS))
+    qaoa_params = QAOAParams(layers=qaoa_layers, optimiser_stepsize=BASE_STEPSIZE, epochs=BASE_EPOCHS//10) if previous_params is None else (
+        QAOAParams(layers=qaoa_layers, optimiser_stepsize=BASE_STEPSIZE/10, epochs=BASE_EPOCHS//10))
     logger.info(f"Starting layered QAOA for {num_qubits} qubits with parameters: {qaoa_params}")
 
     max_memory_gb = 10 # ADJUST THIS BASED ON YOUR GPU CAPACITY
@@ -98,7 +98,7 @@ if __name__ == '__main__':
     pathlib.Path(results_dir).mkdir(exist_ok=True)
 
     # Run QAOA for these qubit counts
-    qubit_counts = [10]
+    qubit_counts = [5, 6]
     limit_files_per_qubit = 5 # Adjust this to limit the number of files processed per qubit count
     start_file_idx = 5
     all_energy_files = {num_qubits: list(pathlib.Path(f"../extraction/alt_energies/{num_qubits}").glob("*.pkl"))for num_qubits in qubit_counts}

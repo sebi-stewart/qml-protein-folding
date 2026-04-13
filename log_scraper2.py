@@ -2,7 +2,7 @@ import pathlib
 from collections import defaultdict
 import pandas as pd
 
-log_files = list(pathlib.Path("temp3").rglob("*.log*"))
+log_files = list(pathlib.Path("temp4").rglob("*.log*"))
 
 runtimes = defaultdict(list)
 
@@ -60,4 +60,4 @@ for qubits, tup in sorted(runtimes.items()):
         data.append({"Qubits": qubits, "FileType": file_type, "Time (s)": time})
 df = pd.DataFrame(data)
 print(df)
-df.to_pickle("qaoa_runtimes4.pkl")
+df.to_pickle("qaoa_30seed_constansts.pkl")

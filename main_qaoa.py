@@ -9,15 +9,15 @@ from qaoa.devices import get_cached_device
 from qaoa.h_mixer import ring_xy_mixer_layer
 from logging_setup import setup_logging
 from qaoa.execution import batched_qaoa
-from qaoa.generators import qaoa_func_generator
+from qaoa.generators import qaoa_func_generator_no_optimisation, qaoa_func_generator_no_jax, qaoa_func_generator_normal
 from qaoa.hamiltonians import extract_ising_items
 from constants import IS_LINUX
 
 import pennylane as qml
 
-from qaoa.metrics import calculate_epsilon_success, extract_metrics_for_serialization
+from qaoa.metrics import calculate_epsilon_success, extract_metrics_for_serialization, calculate_epsilon_success_no_jit
 from qaoa.objects import QAOAParams, init_basic_params, BasicParams
-from qaoa.scoring import extract_lowest_energy_bitstrings
+from qaoa.scoring import extract_lowest_energy_bitstrings, extract_lowest_energy_bitstrings_no_jit
 
 import jax
 jax.config.update("jax_enable_x64", True)
@@ -39,18 +39,14 @@ def layered_run(cost_func, sample_func, target_indices, valid_conformations, num
     logger.info(f"Starting layered QAOA for {num_qubits} qubits with parameters: {qaoa_params}")
 
     max_memory_gb = 10 # ADJUST THIS BASED ON YOUR GPU CAPACITY
-    seed_versions = list(range(5)) # ADJUST THIS BASED ON YOUR DESIRED NUMBER OF SEEDS
+    seed_versions = list(range(30)) # ADJUST THIS BASED ON YOUR DESIRED NUMBER OF SEEDS
 
-    start_time = time.perf_counter()
+    final_probs, cost_history, optimized_params = batched_qaoa(cost_func, sample_func, qaoa_params, seed_versions, num_qubits, max_memory_gb, logger, previous_params=previous_params)
+
     if disable_jit:
-        logger.info("[JIT Config] Running with JIT disabled")
-        with jax.disable_jit():
-            final_probs, cost_history, optimized_params = batched_qaoa(cost_func, sample_func, qaoa_params, seed_versions, num_qubits, max_memory_gb, logger, previous_params=previous_params)
+        success_metric = calculate_epsilon_success_no_jit(final_probs, target_indices)
     else:
-        final_probs, cost_history, optimized_params = batched_qaoa(cost_func, sample_func, qaoa_params, seed_versions, num_qubits, max_memory_gb, logger, previous_params=previous_params)
-    total_time_taken = time.perf_counter() - start_time
-
-    success_metric = calculate_epsilon_success(final_probs, target_indices)
+        success_metric = calculate_epsilon_success(final_probs, target_indices)
     target_probs, conf_prob_map, best_idx = extract_metrics_for_serialization(final_probs, target_indices, valid_conformations)
 
     np.savez(result_path,
@@ -63,14 +59,13 @@ def layered_run(cost_func, sample_func, target_indices, valid_conformations, num
              conformation_map=np.array(conf_prob_map, dtype=object)
     )
 
-    logger.info(f"Saved results to {result_path} - took {total_time_taken:.2f} seconds | avg. {total_time_taken/len(seed_versions):.3f} seconds over {len(seed_versions)} seeds")
     logger.debug(f"Success Metric (P_success) per seed: {success_metric}")
 
-    return optimized_params, total_time_taken
+    return optimized_params
 
 def main(file_path, logger, results_dir, disable_jit=False, disable_adjoint=False):
-    artifact_base_name = file_path.split("/")[-1].split(".")[0]
 
+    artifact_base_name = file_path.split("/")[-1].split(".")[0]
 
     one_body, two_body = load_qaoa_data(file_path)
 
@@ -83,32 +78,40 @@ def main(file_path, logger, results_dir, disable_jit=False, disable_adjoint=Fals
     dev = get_cached_device(num_qubits, device_type)
     logger.info(f"Running on {device_type} for {num_qubits} qubits")
 
-    cost_func, sample_func = qaoa_func_generator(dev, cost_hamiltonian, ring_xy_mixer_layer, basic_params, disable_adjoint)
-    target_indices, valid_conformations = extract_lowest_energy_bitstrings(
-        one_body, two_body,
-        logger, 1.5, basic_params
-    )
+    if disable_adjoint:
+        cost_func, sample_func = qaoa_func_generator_no_optimisation(dev, cost_hamiltonian, ring_xy_mixer_layer, basic_params)
+    elif disable_jit:
+        cost_func, sample_func = qaoa_func_generator_no_jax(dev, cost_hamiltonian, ring_xy_mixer_layer, basic_params)
+    else:
+        cost_func, sample_func = qaoa_func_generator_normal(dev, cost_hamiltonian, ring_xy_mixer_layer, basic_params)
+
+    if disable_jit:
+        target_indices, valid_conformations = extract_lowest_energy_bitstrings_no_jit(
+            one_body, two_body,
+            logger, 1.5, basic_params
+        )
+    else:
+        target_indices, valid_conformations = extract_lowest_energy_bitstrings(
+            one_body, two_body,
+            logger, 1.5, basic_params
+        )
 
     qaoa_layer_tests = [2, 4, 6, 8, 12]
     cached_params = None
 
-    summed_time = 0
 
     for layers in qaoa_layer_tests:
         result_path = f"{results_dir}/{artifact_base_name}_{layers}_layers.npz"
-        cached_params, total_time_taken = layered_run(cost_func, sample_func, target_indices, valid_conformations, num_qubits, layers, result_path, cached_params, disable_jit=disable_jit)
-        summed_time += total_time_taken
-    return summed_time
-
+        cached_params = layered_run(cost_func, sample_func, target_indices, valid_conformations, num_qubits, layers, result_path, cached_params, disable_jit=disable_jit)
 
 if __name__ == '__main__':
     # Run QAOA for these qubit counts
-    qubit_counts = [5, 6, 7, 8, 9] #, 9, 10, 11, 12]
-    limit_files_per_qubit = 1 # Adjust this to limit the number of files processed per qubit count
-    start_file_idx = 4
+    qubit_counts = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    limit_files_per_qubit = 5 # Adjust this to limit the number of files processed per qubit count
+    start_file_idx = 0
     all_energy_files = {num_qubits: list(pathlib.Path(f"extraction/alt_energies/{num_qubits}").glob("*.pkl"))for num_qubits in qubit_counts}
 
-    temp_base = "temp3"
+    temp_base = "temp4"
 
     # Limit the number of files processed per qubit count to manage total runtime
     energy_files = {num_qubits: [] for num_qubits in qubit_counts}
@@ -131,7 +134,9 @@ if __name__ == '__main__':
         logger.info(f"Processing {len(cur_energy_files)} files for {qubit_count} qubits")
         for energy_file in cur_energy_files:
             logger.info(f"Starting QAOA runs for {energy_file.name}")
-            qaoa_time = main(energy_file.as_posix(), logger, results_dir, disable_jit=True, disable_adjoint=True)
+            start = time.perf_counter()
+            main(energy_file.as_posix(), logger, results_dir, disable_jit=True, disable_adjoint=True)
+            qaoa_time = time.perf_counter() - start
             logger.info(f"Completed QAOA runs for {energy_file.name} in {qaoa_time:.2f} seconds - completed ?% of estimated total processing time\n")
 
     logger.info("\n =============== COMPLETED ALL RUNS WITH NO ADJOINT =============== \n")
@@ -149,7 +154,9 @@ if __name__ == '__main__':
         logger.info(f"Processing {len(cur_energy_files)} files for {qubit_count} qubits")
         for energy_file in cur_energy_files:
             logger.info(f"Starting QAOA runs for {energy_file.name}")
-            qaoa_time = main(energy_file.as_posix(), logger, results_dir, disable_jit=True, disable_adjoint=False)
+            start = time.perf_counter()
+            main(energy_file.as_posix(), logger, results_dir, disable_jit=True, disable_adjoint=False)
+            qaoa_time = time.perf_counter() - start
             logger.info(f"Completed QAOA runs for {energy_file.name} in {qaoa_time:.2f} seconds - completed ?% of estimated total processing time\n")
 
     logger.info("\n =============== COMPLETED ALL RUNS WITH NO JIT =============== \n")
@@ -168,7 +175,9 @@ if __name__ == '__main__':
         logger.info(f"Processing {len(cur_energy_files)} files for {qubit_count} qubits")
         for energy_file in cur_energy_files:
             logger.info(f"Starting QAOA runs for {energy_file.name}")
-            qaoa_time = main(energy_file.as_posix(), logger, results_dir, disable_jit=False, disable_adjoint=False)
+            start = time.perf_counter()
+            main(energy_file.as_posix(), logger, results_dir, disable_jit=False, disable_adjoint=False)
+            qaoa_time = time.perf_counter() - start
             logger.info(
                 f"Completed QAOA runs for {energy_file.name} in {qaoa_time:.2f} seconds - completed ?% of estimated total processing time\n")
 

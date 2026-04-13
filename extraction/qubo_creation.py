@@ -97,24 +97,3 @@ def extract_and_reduce_tensors(residue_library: dict[int, TrackedResidue], ig: I
     h_linear, J_quadratic = _extract_hamiltonian_tensors(residue_library, ig)
     h_flex_linear, J_flex_quadratic, global_offset = _reduce_hamiltonian(h_linear, J_quadratic, residue_library)
     return h_flex_linear, J_flex_quadratic, global_offset
-
-
-def build_dense_qubo(h_linear: dict, J_quadratic: dict, num_qubits: int, wire_offsets: dict) -> tuple[np.ndarray, np.ndarray]:
-    h_dense = np.zeros(num_qubits, dtype=np.float64)
-    J_dense = np.zeros((num_qubits, num_qubits), dtype=np.float64)
-
-    # Map Linear Terms (FIXED: Using .items() for nested dictionaries)
-    for seq, energies in h_linear.items():
-        base_wire = wire_offsets[seq]
-        for rot_idx, e_val in energies.items():
-            h_dense[base_wire + rot_idx] = e_val
-
-    # Map Quadratic Terms (Populates an Upper-Triangular Matrix)
-    for (seq_i, seq_j), interactions in J_quadratic.items():
-        for (rot_i, rot_j), e_val in interactions.items():
-            k = wire_offsets[seq_i] + rot_i
-            l = wire_offsets[seq_j] + rot_j
-            # Places the floating point energy directly into the matrix
-            J_dense[k, l] = e_val
-
-    return h_dense, J_dense

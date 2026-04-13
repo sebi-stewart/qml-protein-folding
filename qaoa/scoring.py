@@ -4,7 +4,6 @@ from itertools import product
 import numpy as np
 from dataclasses import dataclass
 
-from extraction.qubo_creation import build_dense_qubo
 from qaoa.objects import BasicParams
 
 import jax.numpy as jnp
@@ -58,10 +57,29 @@ def _get_valid_bitstrings_matrix(params: BasicParams, logger: logging.Logger) ->
     logger.debug(f"Total Valid Conformations Matrix Shape: {X_matrix.shape}")
     return X_matrix, indices
 
+def _build_dense_qubo(h_linear: dict, J_quadratic: dict, num_qubits: int, wire_offsets: dict) -> tuple[np.ndarray, np.ndarray]:
+    h_dense = np.zeros(num_qubits, dtype=np.float64)
+    J_dense = np.zeros((num_qubits, num_qubits), dtype=np.float64)
+
+    # Map Linear Terms (FIXED: Using .items() for nested dictionaries)
+    for seq, energies in h_linear.items():
+        base_wire = wire_offsets[seq]
+        for rot_idx, e_val in energies.items():
+            h_dense[base_wire + rot_idx] = e_val
+
+    # Map Quadratic Terms (Populates an Upper-Triangular Matrix)
+    for (seq_i, seq_j), interactions in J_quadratic.items():
+        for (rot_i, rot_j), e_val in interactions.items():
+            k = wire_offsets[seq_i] + rot_i
+            l = wire_offsets[seq_j] + rot_j
+            # Places the floating point energy directly into the matrix
+            J_dense[k, l] = e_val
+
+    return h_dense, J_dense
 
 def extract_lowest_energy_bitstrings(h_linear, J_quadratic, logger, epsilon, params: BasicParams):
     X_matrix, indices = _get_valid_bitstrings_matrix(params, logger)
-    h_dense, J_dense = build_dense_qubo(h_linear, J_quadratic, params.num_qubits, params.wire_offsets)
+    h_dense, J_dense = _build_dense_qubo(h_linear, J_quadratic, params.num_qubits, params.wire_offsets)
 
     energies = _evaluate_all_qubo_energies(
         jnp.array(X_matrix),

@@ -92,12 +92,13 @@ if __name__ == '__main__':
 
     test_instances = []
     logger.info("Creating test instances...")
-    for residue_length in range(3, 8):
-        for start_pos in range(5, 25):
-            test_instances.append(fac.create_test_instance("5PTI", start_pos, start_pos + residue_length - 1, rot_count=3))
-            test_instances.append(fac.create_test_instance("5PTI", start_pos, start_pos + residue_length - 1, rot_count=4))
+    for residue_length in range(4, 9):
+        for start_pos in range(10, 25):
+            # test_instances.append(fac.create_test_instance("5PTI", start_pos, start_pos + residue_length - 1, rot_count=3))
+            # test_instances.append(fac.create_test_instance("5PTI", start_pos, start_pos + residue_length - 1, rot_count=4))
             test_instances.append(fac.create_test_instance("5PTI", start_pos, start_pos + residue_length - 1, rot_count=5))
             test_instances.append(fac.create_test_instance("5PTI", start_pos, start_pos + residue_length - 1, rot_count=6))
+            test_instances.append(fac.create_test_instance("5PTI", start_pos, start_pos + residue_length - 1, rot_count=7))
     logger.info(f"Created {len(test_instances)} test instances.")
 
 

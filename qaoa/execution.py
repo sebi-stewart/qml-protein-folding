@@ -182,7 +182,7 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
 def sequential_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num_qubits: int, max_memory_gb: float, logger: logging.Logger, previous_params=None):
     """
     Executes seeds sequentially while keeping the same output format as batched_qaoa.
-    Optimized for accelerator execution by compiling the full epoch loop with lax.scan.
+    Uses explicit epoch loops per seed (first sequential implementation style).
     """
     del num_qubits, max_memory_gb  # Unused in sequential mode, kept for API compatibility.
 
@@ -202,53 +202,16 @@ def sequential_qaoa(cost_function, sample_function, qaoa_params, seed_versions, 
 
     optimizer = optax.adam(learning_rate=qaoa_params.optimiser_stepsize)
 
-    def _scan_step(carry, _):
-        params, opt_state_inner, best_cost, patience_counter, converged = carry
-
-        def _active_step(args):
-            current_params, current_opt_state, current_best, current_patience = args
-            cost_val, grads = jax.value_and_grad(cost_function)(current_params)
-            updates, next_opt_state = optimizer.update(grads, current_opt_state, current_params)
-            next_params = optax.apply_updates(current_params, updates)
-
-            improved = (current_best - cost_val) > EARLY_STOPPING_DELTA
-            next_best = jnp.where(improved, cost_val, current_best)
-            next_patience = jnp.where(improved, 0, current_patience + 1)
-            next_converged = next_patience >= EARLY_STOPPING_PATIENCE
-            return next_params, next_opt_state, next_best, next_patience, next_converged, cost_val
-
-        def _converged_step(args):
-            current_params, current_opt_state, current_best, current_patience = args
-            return current_params, current_opt_state, current_best, current_patience, jnp.array(True), current_best
-
-        next_params, next_opt_state, next_best, next_patience, next_converged, cost_out = jax.lax.cond(
-            converged,
-            _converged_step,
-            _active_step,
-            (params, opt_state_inner, best_cost, patience_counter),
-        )
-
-        return (next_params, next_opt_state, next_best, next_patience, next_converged), cost_out
+    @jax.jit
+    def update_step(params, opt_state_inner):
+        cost_val, grads = jax.value_and_grad(cost_function)(params)
+        updates, next_opt_state = optimizer.update(grads, opt_state_inner, params)
+        next_params = optax.apply_updates(params, updates)
+        return next_params, next_opt_state, cost_val
 
     @jax.jit
-    def optimize_single_seed(initial_params):
-        initial_opt_state = optimizer.init(initial_params)
-        init_carry = (
-            initial_params,
-            initial_opt_state,
-            jnp.array(jnp.inf),
-            jnp.array(0, dtype=jnp.int32),
-            jnp.array(False),
-        )
-
-        (final_params, _, _, _, _), cost_history = jax.lax.scan(
-            _scan_step,
-            init_carry,
-            xs=None,
-            length=qaoa_params.epochs,
-        )
-        final_probs = sample_function(final_params)
-        return final_probs, cost_history, final_params
+    def sample_step(params):
+        return sample_function(params)
 
     all_final_probs = []
     all_cost_histories = []
@@ -275,12 +238,30 @@ def sequential_qaoa(cost_function, sample_function, qaoa_params, seed_versions, 
         else:
             current_params = padded_params[i]
 
-        final_probs, cost_history, final_params = optimize_single_seed(current_params)
+        current_opt_state = optimizer.init(current_params)
+        best_cost = jnp.array(jnp.inf, dtype=dtype)
+        patience_counter = 0
+        converged = False
+
+        seed_costs = []
+        for _ in range(qaoa_params.epochs):
+            if not converged:
+                current_params, current_opt_state, cost_val = update_step(current_params, current_opt_state)
+                improved = float(best_cost - cost_val) > EARLY_STOPPING_DELTA
+                best_cost = cost_val if improved else best_cost
+                patience_counter = 0 if improved else patience_counter + 1
+                converged = patience_counter >= EARLY_STOPPING_PATIENCE
+                seed_costs.append(cost_val)
+            else:
+                seed_costs.append(best_cost)
+
+        cost_history = jnp.asarray(seed_costs)
+        final_probs = sample_step(current_params)
         logger.info(f"\t[Sequential Tracker] Completed Seed {i + 1} - Final Cost: {cost_history[-1]:.4f}")
 
         all_final_probs.append(final_probs)
         all_cost_histories.append(cost_history)
-        all_optimized_params.append(final_params)
+        all_optimized_params.append(current_params)
 
     combined_probs = jnp.stack(all_final_probs, axis=0)
     combined_costs = jnp.stack(all_cost_histories, axis=0)

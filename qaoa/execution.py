@@ -96,39 +96,6 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
             converged_mask
         )
 
-    def _batch_scan_step(carry, _):
-        params_batch, opt_state_batch, best_costs, patience_counters, converged_mask = carry
-
-        params_batch, opt_state_batch, batched_costs = batched_update_step(
-            params_batch,
-            opt_state_batch,
-            converged_mask,
-        )
-
-        improved = (best_costs - batched_costs) > EARLY_STOPPING_DELTA
-        best_costs = jnp.where(improved, batched_costs, best_costs)
-        patience_counters = jnp.where(improved, 0, patience_counters + 1)
-        converged_mask = patience_counters >= EARLY_STOPPING_PATIENCE
-
-        return (params_batch, opt_state_batch, best_costs, patience_counters, converged_mask), batched_costs
-
-    @jax.jit
-    def optimize_batch(initial_params, initial_opt_state):
-        init_carry = (
-            initial_params,
-            initial_opt_state,
-            jnp.full(initial_params.shape[0], jnp.inf, dtype=dtype),
-            jnp.zeros(initial_params.shape[0], dtype=jnp.int32),
-            jnp.zeros(initial_params.shape[0], dtype=jnp.bool_),
-        )
-        (final_params, _, _, _, final_converged_mask), cost_history = jax.lax.scan(
-            _batch_scan_step,
-            init_carry,
-            xs=None,
-            length=qaoa_params.epochs,
-        )
-        return final_params, cost_history, final_converged_mask
-
     @jax.jit
     def batched_sample(params_batch):
         return jax.vmap(sample_function)(params_batch)
@@ -153,14 +120,37 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
 
         current_opt_state = jax.vmap(optimizer.init)(current_params)
 
-        current_params, batch_cost_history, final_converged_mask = optimize_batch(current_params, current_opt_state)
+        batch_cost_history = []
+        best_costs = jnp.full(batch_size, jnp.inf)
+        patience_counters = jnp.zeros(batch_size, dtype=jnp.int32)
+        converged_mask = jnp.zeros(batch_size, dtype=jnp.bool_)
 
-        # Convert scan output from (epochs, batch_size) to (batch_size, epochs)
-        batch_cost_history = jnp.swapaxes(batch_cost_history, 0, 1)
-        final_batch_costs = batch_cost_history[:, -1]
-        logger.info(
-            f"\t[EPOCH Tracker] Completed Epochs for Batch {b+1} - Final Cost: {jnp.mean(final_batch_costs):.4f} | Stopped Seeds: {jnp.sum(final_converged_mask)} / {batch_size}"
-        )
+        # Epoch Loop for this chunk
+        for epoch in range(qaoa_params.epochs):
+            current_params, current_opt_state, batched_costs = batched_update_step(
+                current_params,
+                current_opt_state,
+                converged_mask
+            )
+            batch_cost_history.append(batched_costs)
+            if epoch % 10 == 0:
+                logger.debug(
+                    f"\t[EPOCH Tracker] Epoch  {epoch} | Cost: {jnp.mean(batched_costs):.4f} | Stopped Seeds: {jnp.sum(converged_mask)} / {batch_size}")
+
+            improved = (best_costs - batched_costs) > EARLY_STOPPING_DELTA
+
+            best_costs = jnp.where(improved, batched_costs, best_costs)
+            patience_counters = jnp.where(improved, 0, patience_counters + 1)
+            converged_mask = patience_counters >= EARLY_STOPPING_PATIENCE
+            if jnp.all(converged_mask):
+                logger.debug(
+                    f"\t[EPOCH Tracker] Early stopping triggered at epoch {epoch} for all seeds in this batch.")
+                break
+
+        # Convert batch cost history to array: (batch_size, epochs)
+        logger.info(f"\t[EPOCH Tracker] Completed Epochs for Batch {b + 1} - Final Cost: {jnp.mean(batched_costs):.4f}")
+        batch_cost_history = jnp.stack(batch_cost_history, axis=1)
+
         all_cost_histories.append(batch_cost_history)
 
         # Sample the final probabilities

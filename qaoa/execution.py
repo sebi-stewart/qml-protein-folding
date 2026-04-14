@@ -3,11 +3,14 @@ import math
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import optax
 
 EARLY_STOPPING_PATIENCE = 10
 EARLY_STOPPING_DELTA = 1e-4
+
+
+def _param_dtype():
+    return jnp.float64 if jax.config.read("jax_enable_x64") else jnp.float32
 
 def _retrieve_batch_size(num_qubits: int, max_memory_gb: float, original_num_seeds: int):
     bytes_per_state = (2 ** num_qubits) * 16
@@ -16,7 +19,9 @@ def _retrieve_batch_size(num_qubits: int, max_memory_gb: float, original_num_see
     if b_max < 1:
         raise MemoryError(f"Insufficient memory ({max_memory_gb}GB) to run even a single seed for {num_qubits} qubits.")
 
-    return min(b_max, original_num_seeds)
+    compiler_cap = 6
+
+    return min(compiler_cap, b_max, original_num_seeds)
 
 def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num_qubits: int, max_memory_gb: float, logger: logging.Logger, previous_params=None):
     """
@@ -32,6 +37,7 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
 
     master_key = jax.random.PRNGKey(seed_versions[0])
     keys = jax.random.split(master_key, padded_total_seeds)
+    padded_params = None
 
     # --- WARM START LOGIC: Handle padding and noise globally before the batch loop ---
     if previous_params is not None:
@@ -53,8 +59,16 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
             padded_params = previous_params
 
     # 2. Initialize a batched parameter tensor of shape (30, 2, layers)
+    dtype = _param_dtype()
+
     def init_params(key):
-        return jax.random.uniform(key, shape=(2, qaoa_params.layers), minval=-jnp.pi, maxval=jnp.pi)
+        return jax.random.uniform(
+            key,
+            shape=(2, qaoa_params.layers),
+            minval=-jnp.pi,
+            maxval=jnp.pi,
+            dtype=dtype,
+        )
 
     optimizer = optax.adam(learning_rate=qaoa_params.optimiser_stepsize)
 
@@ -73,8 +87,7 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
         return final_params, new_opt_state, cost_val
 
 
-    # 5. JIT-Compile the VMAP'd update step
-    # in_axes=(0, 0) means "vectorize over the first dimension of both inputs"
+    # VMAP a single seed update over the seed dimension.
     @jax.jit
     def batched_update_step(params_batch, opt_state_batch, converged_mask):
         return jax.vmap(single_update_step, in_axes=(0, 0, 0))(
@@ -82,6 +95,39 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
             opt_state_batch,
             converged_mask
         )
+
+    def _batch_scan_step(carry, _):
+        params_batch, opt_state_batch, best_costs, patience_counters, converged_mask = carry
+
+        params_batch, opt_state_batch, batched_costs = batched_update_step(
+            params_batch,
+            opt_state_batch,
+            converged_mask,
+        )
+
+        improved = (best_costs - batched_costs) > EARLY_STOPPING_DELTA
+        best_costs = jnp.where(improved, batched_costs, best_costs)
+        patience_counters = jnp.where(improved, 0, patience_counters + 1)
+        converged_mask = patience_counters >= EARLY_STOPPING_PATIENCE
+
+        return (params_batch, opt_state_batch, best_costs, patience_counters, converged_mask), batched_costs
+
+    @jax.jit
+    def optimize_batch(initial_params, initial_opt_state):
+        init_carry = (
+            initial_params,
+            initial_opt_state,
+            jnp.full(initial_params.shape[0], jnp.inf, dtype=dtype),
+            jnp.zeros(initial_params.shape[0], dtype=jnp.int32),
+            jnp.zeros(initial_params.shape[0], dtype=jnp.bool_),
+        )
+        (final_params, _, _, _, final_converged_mask), cost_history = jax.lax.scan(
+            _batch_scan_step,
+            init_carry,
+            xs=None,
+            length=qaoa_params.epochs,
+        )
+        return final_params, cost_history, final_converged_mask
 
     @jax.jit
     def batched_sample(params_batch):
@@ -107,34 +153,14 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
 
         current_opt_state = jax.vmap(optimizer.init)(current_params)
 
-        batch_cost_history = []
-        best_costs = jnp.full(batch_size, jnp.inf)
-        patience_counters = jnp.zeros(batch_size, dtype=jnp.int32)
-        converged_mask = jnp.zeros(batch_size, dtype=jnp.bool_)
+        current_params, batch_cost_history, final_converged_mask = optimize_batch(current_params, current_opt_state)
 
-        # Epoch Loop for this chunk
-        for epoch in range(qaoa_params.epochs):
-            current_params, current_opt_state, batched_costs = batched_update_step(
-                current_params,
-                current_opt_state,
-                converged_mask
-            )
-            batch_cost_history.append(batched_costs)
-            if epoch % 10 == 0:
-                logger.debug(f"\t[EPOCH Tracker] Epoch  {epoch} | Cost: {np.mean(batched_costs):.4f} | Stopped Seeds: {jnp.sum(converged_mask)} / {batch_size}")
-
-            improved = (best_costs - batched_costs) > EARLY_STOPPING_DELTA
-
-            best_costs = jnp.where(improved, batched_costs, best_costs)
-            patience_counters = jnp.where(improved, 0, patience_counters + 1)
-            converged_mask = patience_counters >= EARLY_STOPPING_PATIENCE
-            if jnp.all(converged_mask):
-                logger.debug(f"\t[EPOCH Tracker] Early stopping triggered at epoch {epoch} for all seeds in this batch.")
-                break
-
-        # Convert batch cost history to array: (batch_size, epochs)
-        logger.info(f"\t[EPOCH Tracker] Completed Epochs for Batch {b+1} - Final Cost: {np.mean(batched_costs):.4f}")
-        batch_cost_history = jnp.stack(batch_cost_history, axis=1)
+        # Convert scan output from (epochs, batch_size) to (batch_size, epochs)
+        batch_cost_history = jnp.swapaxes(batch_cost_history, 0, 1)
+        final_batch_costs = batch_cost_history[:, -1]
+        logger.info(
+            f"\t[EPOCH Tracker] Completed Epochs for Batch {b+1} - Final Cost: {jnp.mean(final_batch_costs):.4f} | Stopped Seeds: {jnp.sum(final_converged_mask)} / {batch_size}"
+        )
         all_cost_histories.append(batch_cost_history)
 
         # Sample the final probabilities
@@ -151,3 +177,114 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
     combined_params = jnp.vstack(all_optimized_params)
 
     return combined_probs[:original_num_seeds], combined_costs[:original_num_seeds], combined_params[:original_num_seeds]
+
+
+def sequential_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num_qubits: int, max_memory_gb: float, logger: logging.Logger, previous_params=None):
+    """
+    Executes seeds sequentially while keeping the same output format as batched_qaoa.
+    Optimized for accelerator execution by compiling the full epoch loop with lax.scan.
+    """
+    del num_qubits, max_memory_gb  # Unused in sequential mode, kept for API compatibility.
+
+    original_num_seeds = len(seed_versions)
+    logger.debug(f"[Sequential Tracker] Executing {original_num_seeds} Seeds Sequentially")
+    padded_params = None
+    dtype = _param_dtype()
+
+    def init_params(key):
+        return jax.random.uniform(
+            key,
+            shape=(2, qaoa_params.layers),
+            minval=-jnp.pi,
+            maxval=jnp.pi,
+            dtype=dtype,
+        )
+
+    optimizer = optax.adam(learning_rate=qaoa_params.optimiser_stepsize)
+
+    def _scan_step(carry, _):
+        params, opt_state_inner, best_cost, patience_counter, converged = carry
+
+        def _active_step(args):
+            current_params, current_opt_state, current_best, current_patience = args
+            cost_val, grads = jax.value_and_grad(cost_function)(current_params)
+            updates, next_opt_state = optimizer.update(grads, current_opt_state, current_params)
+            next_params = optax.apply_updates(current_params, updates)
+
+            improved = (current_best - cost_val) > EARLY_STOPPING_DELTA
+            next_best = jnp.where(improved, cost_val, current_best)
+            next_patience = jnp.where(improved, 0, current_patience + 1)
+            next_converged = next_patience >= EARLY_STOPPING_PATIENCE
+            return next_params, next_opt_state, next_best, next_patience, next_converged, cost_val
+
+        def _converged_step(args):
+            current_params, current_opt_state, current_best, current_patience = args
+            return current_params, current_opt_state, current_best, current_patience, jnp.array(True), current_best
+
+        next_params, next_opt_state, next_best, next_patience, next_converged, cost_out = jax.lax.cond(
+            converged,
+            _converged_step,
+            _active_step,
+            (params, opt_state_inner, best_cost, patience_counter),
+        )
+
+        return (next_params, next_opt_state, next_best, next_patience, next_converged), cost_out
+
+    @jax.jit
+    def optimize_single_seed(initial_params):
+        initial_opt_state = optimizer.init(initial_params)
+        init_carry = (
+            initial_params,
+            initial_opt_state,
+            jnp.array(jnp.inf),
+            jnp.array(0, dtype=jnp.int32),
+            jnp.array(False),
+        )
+
+        (final_params, _, _, _, _), cost_history = jax.lax.scan(
+            _scan_step,
+            init_carry,
+            xs=None,
+            length=qaoa_params.epochs,
+        )
+        final_probs = sample_function(final_params)
+        return final_probs, cost_history, final_params
+
+    all_final_probs = []
+    all_cost_histories = []
+    all_optimized_params = []
+
+    if previous_params is not None:
+        prev_layers = previous_params.shape[2]
+        new_layers = qaoa_params.layers - prev_layers
+
+        if new_layers > 0:
+            padded_params = jnp.pad(previous_params, ((0, 0), (0, 0), (0, new_layers)))
+            noise_key = jax.random.PRNGKey(seed_versions[0] + qaoa_params.layers)
+            noise = jax.random.normal(noise_key, shape=(original_num_seeds, 2, new_layers)) * 1e-4
+            padded_params = padded_params.at[:, :, prev_layers:].add(noise)
+        else:
+            padded_params = previous_params
+
+    for i, seed in enumerate(seed_versions):
+        logger.debug(f"[Sequential Tracker] Seed {i + 1} / {original_num_seeds}")
+
+        if previous_params is None:
+            seed_key = jax.random.PRNGKey(seed)
+            current_params = init_params(seed_key)
+        else:
+            current_params = padded_params[i]
+
+        final_probs, cost_history, final_params = optimize_single_seed(current_params)
+        logger.info(f"\t[Sequential Tracker] Completed Seed {i + 1} - Final Cost: {cost_history[-1]:.4f}")
+
+        all_final_probs.append(final_probs)
+        all_cost_histories.append(cost_history)
+        all_optimized_params.append(final_params)
+
+    combined_probs = jnp.stack(all_final_probs, axis=0)
+    combined_costs = jnp.stack(all_cost_histories, axis=0)
+    combined_params = jnp.stack(all_optimized_params, axis=0)
+
+    return combined_probs, combined_costs, combined_params
+

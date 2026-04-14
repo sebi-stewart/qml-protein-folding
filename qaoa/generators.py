@@ -39,7 +39,7 @@ def qaoa_func_generator(dev, H_ising, mixer_layer, generator_params: BasicParams
         # 3. Measure the expectation value of the cost Hamiltonian
         return qml.expval(H_ising)
 
-    @qml.qnode(dev)
+    @qml.qnode(dev, interface="jax", diff_method=None)
     def sample_function(params):
         gammas = params[0]
         betas = params[1]

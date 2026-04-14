@@ -10,6 +10,10 @@ import jax.numpy as jnp
 import jax
 
 
+def _score_dtype():
+    return np.float64 if jax.config.read("jax_enable_x64") else np.float32
+
+
 @dataclass
 class Conformation:
     idx: int
@@ -48,7 +52,7 @@ def _get_valid_bitstrings_matrix(params: BasicParams, logger: logging.Logger) ->
             bitstring[wire_offsets[seq] + rotamer_combo[seq_idx]] = 1
         valid_bitstrings.append(bitstring)
 
-    X_matrix = np.array(valid_bitstrings, dtype=np.float64)
+    X_matrix = np.array(valid_bitstrings, dtype=_score_dtype())
 
     # Vectorized conversion to base-10 indices
     powers_of_two = 1 << np.arange(num_qubits)[::-1]
@@ -58,8 +62,9 @@ def _get_valid_bitstrings_matrix(params: BasicParams, logger: logging.Logger) ->
     return X_matrix, indices
 
 def _build_dense_qubo(h_linear: dict, J_quadratic: dict, num_qubits: int, wire_offsets: dict) -> tuple[np.ndarray, np.ndarray]:
-    h_dense = np.zeros(num_qubits, dtype=np.float64)
-    J_dense = np.zeros((num_qubits, num_qubits), dtype=np.float64)
+    dtype = _score_dtype()
+    h_dense = np.zeros(num_qubits, dtype=dtype)
+    J_dense = np.zeros((num_qubits, num_qubits), dtype=dtype)
 
     # Map Linear Terms (FIXED: Using .items() for nested dictionaries)
     for seq, energies in h_linear.items():

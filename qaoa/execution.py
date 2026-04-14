@@ -4,13 +4,11 @@ import math
 import jax
 import jax.numpy as jnp
 import optax
+from catalyst import qjit, vmap, value_and_grad
 
 EARLY_STOPPING_PATIENCE = 10
 EARLY_STOPPING_DELTA = 1e-4
 
-
-def _param_dtype():
-    return jnp.float64 if jax.config.read("jax_enable_x64") else jnp.float32
 
 def _retrieve_batch_size(num_qubits: int, max_memory_gb: float, original_num_seeds: int):
     bytes_per_state = (2 ** num_qubits) * 16
@@ -59,46 +57,35 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
             padded_params = previous_params
 
     # 2. Initialize a batched parameter tensor of shape (30, 2, layers)
-    dtype = _param_dtype()
-
     def init_params(key):
         return jax.random.uniform(
             key,
             shape=(2, qaoa_params.layers),
             minval=-jnp.pi,
             maxval=jnp.pi,
-            dtype=dtype,
+            dtype=jnp.float64,
         )
 
     optimizer = optax.adam(learning_rate=qaoa_params.optimiser_stepsize)
 
-    def single_update_step(params, opt_state_inner, is_converged):
-        cost_val, grads = jax.value_and_grad(cost_function)(params)
-        updates, new_opt_state = optimizer.update(grads, opt_state_inner, params)
-        new_params = optax.apply_updates(params, updates)
-
-        # Conditionally freeze parameters and optimizer state if converged
-        final_params = jax.tree_util.tree_map(
-            lambda old, new: jnp.where(is_converged, old, new),
-            params,
-            new_params
-        )
-
-        return final_params, new_opt_state, cost_val
-
-
     # VMAP a single seed update over the seed dimension.
-    @jax.jit
+    @qjit
     def batched_update_step(params_batch, opt_state_batch, converged_mask):
-        return jax.vmap(single_update_step, in_axes=(0, 0, 0))(
-            params_batch,
-            opt_state_batch,
-            converged_mask
-        )
+        def single_update_step(params, opt_state_inner, is_converged):
+            cost_val, grads = value_and_grad(cost_function)(params)
+            updates, new_opt_state = optimizer.update(grads, opt_state_inner, params)
+            new_params = optax.apply_updates(params, updates)
 
-    @jax.jit
+            # Conditionally freeze parameters if converged
+            final_params = jnp.where(is_converged, params, new_params)
+
+            return final_params, new_opt_state, cost_val
+
+        return vmap(single_update_step, in_axes=0)(params_batch, opt_state_batch, converged_mask)
+
+    @qjit
     def batched_sample(params_batch):
-        return jax.vmap(sample_function)(params_batch)
+        return vmap(sample_function, in_axes=0)(params_batch)
 
 
     all_final_probs = []
@@ -179,27 +166,25 @@ def sequential_qaoa(cost_function, sample_function, qaoa_params, seed_versions, 
     original_num_seeds = len(seed_versions)
     logger.debug(f"[Sequential Tracker] Executing {original_num_seeds} Seeds Sequentially")
     padded_params = None
-    dtype = _param_dtype()
-
     def init_params(key):
         return jax.random.uniform(
             key,
             shape=(2, qaoa_params.layers),
             minval=-jnp.pi,
             maxval=jnp.pi,
-            dtype=dtype,
+            dtype=jnp.float64,
         )
 
     optimizer = optax.adam(learning_rate=qaoa_params.optimiser_stepsize)
 
-    @jax.jit
+    @qjit
     def update_step(params, opt_state_inner):
-        cost_val, grads = jax.value_and_grad(cost_function)(params)
+        cost_val, grads = value_and_grad(cost_function)(params)
         updates, next_opt_state = optimizer.update(grads, opt_state_inner, params)
         next_params = optax.apply_updates(params, updates)
         return next_params, next_opt_state, cost_val
 
-    @jax.jit
+    @qjit
     def sample_step(params):
         return sample_function(params)
 
@@ -229,7 +214,7 @@ def sequential_qaoa(cost_function, sample_function, qaoa_params, seed_versions, 
             current_params = padded_params[i]
 
         current_opt_state = optimizer.init(current_params)
-        best_cost = jnp.array(jnp.inf, dtype=dtype)
+        best_cost = jnp.array(jnp.inf)
         patience_counter = 0
         converged = False
 

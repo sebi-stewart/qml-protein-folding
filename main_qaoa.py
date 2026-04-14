@@ -20,14 +20,9 @@ from qaoa.metrics import calculate_epsilon_success, extract_metrics_for_serializ
 from qaoa.objects import QAOAParams, init_basic_params, BasicParams
 from qaoa.scoring import extract_lowest_energy_bitstrings
 
-import jax
-
-JAX_ENABLE_X64 = os.getenv("QAOA_ENABLE_X64", "0") == "1"
 QAOA_EXECUTION_MODE = os.getenv("QAOA_EXECUTION_MODE", "batched").lower()
 QAOA_MAX_MEMORY_GB = float(os.getenv("QAOA_MAX_MEMORY_GB", "60"))
 QAOA_NUM_SEEDS = int(os.getenv("QAOA_NUM_SEEDS", "30"))
-
-jax.config.update("jax_enable_x64", JAX_ENABLE_X64)
 
 
 def _run_qaoa(cost_func, sample_func, qaoa_params, seed_versions, num_qubits, max_memory_gb, logger, previous_params):
@@ -115,7 +110,7 @@ def main(file_path, logger, results_dir):
     dev = get_cached_device(num_qubits, device_type)
     logger.info(f"Running on {device_type} for {num_qubits} qubits")
     logger.info(
-        f"JAX backend={jax.default_backend()} | x64={jax.config.read('jax_enable_x64')} | mode={QAOA_EXECUTION_MODE} | seeds={QAOA_NUM_SEEDS}"
+        f"Catalyst/qjit backend | mode={QAOA_EXECUTION_MODE} | seeds={QAOA_NUM_SEEDS}"
     )
 
     cost_func, sample_func = qaoa_func_generator(dev, cost_hamiltonian, ring_xy_mixer_layer, basic_params)

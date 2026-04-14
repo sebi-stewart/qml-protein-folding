@@ -1,4 +1,4 @@
-jax
+pennylane-catalyst
 optax
 matplotlib
 seaborn

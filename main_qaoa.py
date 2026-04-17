@@ -93,7 +93,9 @@ def layered_run(cost_func, sample_func, target_indices, valid_conformations, num
 
              target_indices=target_indices,
              best_target_index=best_idx,
-             conformation_map=np.array(conf_prob_map, dtype=object)
+             conformation_map=np.array(conf_prob_map, dtype=object),
+
+             optimized_params=optimized_params,
     )
 
     logger.debug(f"Success Metric (P_success) per seed: {success_metric}")

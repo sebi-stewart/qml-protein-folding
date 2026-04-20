@@ -51,7 +51,7 @@ def qaoa_func_generator(dev, H_ising, mixer_layer, generator_params: BasicParams
 
             return qml.probs(wires=range(num_qubits))
     else:
-        @qml.set_shots(value=shots)
+        @qml.set_shots(shots)
         @qml.qnode(dev, interface="jax", diff_method=None)
         def sample_function(params):
             gammas = params[0]

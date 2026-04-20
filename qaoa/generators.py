@@ -1,6 +1,6 @@
+from catalyst import qjit
 import numpy as np
 import pennylane as qml
-from catalyst import qjit
 from qaoa.objects import BasicParams
 
 

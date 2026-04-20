@@ -15,4 +15,6 @@ logs/*
 *.png
 
 *.npz
+
 __pycache__/
+*.pyc

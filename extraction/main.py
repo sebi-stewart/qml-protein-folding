@@ -38,6 +38,16 @@ class TestInstanceFactory:
             rotamer_count=rot_count
         )
 
+    @staticmethod
+    def create_test_instance_from_func(pose_func: Callable[[], pyrosetta.Pose], test_name: str, start: int, end: int, rot_count: int) -> ExtractionTestInstance:
+        return ExtractionTestInstance(
+            pose_func=pose_func,
+            test_name=test_name,
+            residue_start=start,
+            residue_end=end,
+            rotamer_count=rot_count
+        )
+
 def run_pyrosetta_obj_extraction(pose_func, logger: logging.Logger, n=4, active_start=20, active_end=24):
     pose = pose_func()
     residue_library, ig, rot_sets, scorefxn = extract_top_n_rotamers(

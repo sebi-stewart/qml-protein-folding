@@ -27,7 +27,7 @@ def qaoa_func_generator(dev, H_ising, mixer_layer, generator_params: BasicParams
 
             qml.StatePrep(state_vector, wires=bundle_wires)
 
-    @qml.qnode(dev, interface="jax", diff_method="adjoint")
+    @qml.qnode(dev, diff_method="adjoint")
     def cost_function(params):
         gammas = params[0]
         betas = params[1]
@@ -40,7 +40,7 @@ def qaoa_func_generator(dev, H_ising, mixer_layer, generator_params: BasicParams
         return qml.expval(H_ising)
 
     if shots is None:
-        @qml.qnode(dev, interface="jax", diff_method=None)
+        @qml.qnode(dev, diff_method=None)
         def sample_function(params):
             gammas = params[0]
             betas = params[1]

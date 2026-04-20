@@ -1,11 +1,11 @@
-import jax
 import jax.numpy as jnp
 import numpy as np
 
 from qaoa.scoring import Conformation
+from catalyst import qjit
 
 
-@jax.jit
+@qjit
 def calculate_epsilon_success(batched_probs, target_indices):
     """
     Executes on the A100.

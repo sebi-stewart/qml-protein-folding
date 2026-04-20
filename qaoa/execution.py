@@ -16,7 +16,7 @@ def _retrieve_batch_size(num_qubits: int, max_memory_gb: float, original_num_see
     if b_max < 1:
         raise MemoryError(f"Insufficient memory ({max_memory_gb}GB) to run even a single seed for {num_qubits} qubits.")
 
-    compiler_cap = 6
+    compiler_cap = 120//((1/3)*2**((num_qubits-8)//3))
 
     return min(compiler_cap, b_max, original_num_seeds)
 

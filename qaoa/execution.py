@@ -4,7 +4,6 @@ import math
 import jax
 import jax.numpy as jnp
 import optax
-from catalyst import qjit, vmap, value_and_grad
 
 EARLY_STOPPING_PATIENCE = 10
 EARLY_STOPPING_DELTA = 1e-4
@@ -69,10 +68,10 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
     optimizer = optax.adam(learning_rate=qaoa_params.optimiser_stepsize)
 
     # VMAP a single seed update over the seed dimension.
-    @qjit
+    @jax.jit
     def batched_update_step(params_batch, opt_state_batch, converged_mask):
         def single_update_step(params, opt_state_inner, is_converged):
-            cost_val, grads = value_and_grad(cost_function)(params)
+            cost_val, grads = jax.value_and_grad(cost_function)(params)
             updates, new_opt_state = optimizer.update(grads, opt_state_inner, params)
             new_params = optax.apply_updates(params, updates)
 
@@ -81,11 +80,11 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
 
             return final_params, new_opt_state, cost_val
 
-        return vmap(single_update_step, in_axes=0)(params_batch, opt_state_batch, converged_mask)
+        return jax.vmap(single_update_step, in_axes=0)(params_batch, opt_state_batch, converged_mask)
 
-    @qjit
+    @jax.jit
     def batched_sample(params_batch):
-        return vmap(sample_function, in_axes=0)(params_batch)
+        return jax.vmap(sample_function, in_axes=0)(params_batch)
 
 
     all_final_probs = []
@@ -177,14 +176,14 @@ def sequential_qaoa(cost_function, sample_function, qaoa_params, seed_versions, 
 
     optimizer = optax.adam(learning_rate=qaoa_params.optimiser_stepsize)
 
-    @qjit
+    @jax.jit
     def update_step(params, opt_state_inner):
-        cost_val, grads = value_and_grad(cost_function)(params)
+        cost_val, grads = jax.value_and_grad(cost_function)(params)
         updates, next_opt_state = optimizer.update(grads, opt_state_inner, params)
         next_params = optax.apply_updates(params, updates)
         return next_params, next_opt_state, cost_val
 
-    @qjit
+    @jax.jit
     def sample_step(params):
         return sample_function(params)
 
@@ -243,4 +242,3 @@ def sequential_qaoa(cost_function, sample_function, qaoa_params, seed_versions, 
     combined_params = jnp.stack(all_optimized_params, axis=0)
 
     return combined_probs, combined_costs, combined_params
-

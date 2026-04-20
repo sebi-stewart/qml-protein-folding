@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from qaoa.objects import BasicParams
 
 import jax.numpy as jnp
-from catalyst import qjit
+import jax
 
 
 @dataclass
@@ -17,7 +17,7 @@ class Conformation:
     qubo_energy: np.float64
 
 
-@qjit
+@jax.jit
 def _evaluate_all_qubo_energies(X_matrix, h_dense, J_dense):
     """
     Executes on GPU/CPU via XLA.
@@ -49,7 +49,7 @@ def _get_valid_bitstrings_matrix(params: BasicParams, logger: logging.Logger) ->
             bitstring[wire_offsets[seq] + rotamer_combo[seq_idx]] = 1
         valid_bitstrings.append(bitstring)
 
-    X_matrix = np.array(valid_bitstrings, dtype=np.float64)
+    X_matrix = np.array(valid_bitstrings, dtype=np.float32)
 
     # Vectorized conversion to base-10 indices
     powers_of_two = 1 << np.arange(num_qubits)[::-1]
@@ -59,8 +59,8 @@ def _get_valid_bitstrings_matrix(params: BasicParams, logger: logging.Logger) ->
     return X_matrix, indices
 
 def _build_dense_qubo(h_linear: dict, J_quadratic: dict, num_qubits: int, wire_offsets: dict) -> tuple[np.ndarray, np.ndarray]:
-    h_dense = np.zeros(num_qubits, dtype=np.float64)
-    J_dense = np.zeros((num_qubits, num_qubits), dtype=np.float64)
+    h_dense = np.zeros(num_qubits, dtype=np.float32)
+    J_dense = np.zeros((num_qubits, num_qubits), dtype=np.float32)
 
     # Map Linear Terms (FIXED: Using .items() for nested dictionaries)
     for seq, energies in h_linear.items():

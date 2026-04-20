@@ -1,4 +1,3 @@
-from catalyst import qjit
 import numpy as np
 import pennylane as qml
 from qaoa.objects import BasicParams
@@ -28,8 +27,7 @@ def qaoa_func_generator(dev, H_ising, mixer_layer, generator_params: BasicParams
 
             qml.StatePrep(state_vector, wires=bundle_wires)
 
-    @qjit
-    @qml.qnode(dev, diff_method="adjoint")
+    @qml.qnode(dev, interface="jax", diff_method="adjoint")
     def cost_function(params):
         gammas = params[0]
         betas = params[1]
@@ -42,8 +40,7 @@ def qaoa_func_generator(dev, H_ising, mixer_layer, generator_params: BasicParams
         return qml.expval(H_ising)
 
     if shots is None:
-        @qjit
-        @qml.qnode(dev, diff_method=None)
+        @qml.qnode(dev, interface="jax", diff_method=None)
         def sample_function(params):
             gammas = params[0]
             betas = params[1]
@@ -54,7 +51,6 @@ def qaoa_func_generator(dev, H_ising, mixer_layer, generator_params: BasicParams
 
             return qml.probs(wires=range(num_qubits))
     else:
-        @qjit
         @qml.set_shots(shots)
         @qml.qnode(dev, interface="jax", diff_method=None)
         def sample_function(params):

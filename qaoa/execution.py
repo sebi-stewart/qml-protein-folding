@@ -16,7 +16,7 @@ def _retrieve_batch_size(num_qubits: int, max_memory_gb: float, original_num_see
     if b_max < 1:
         raise MemoryError(f"Insufficient memory ({max_memory_gb}GB) to run even a single seed for {num_qubits} qubits.")
 
-    compiler_cap = 120//((1/3)*2**((num_qubits-8)//3))
+    compiler_cap = int(30 - ((num_qubits - 8) * (3/2))) if num_qubits > 8 else 30
 
     return min(compiler_cap, b_max, original_num_seeds)
 
@@ -56,13 +56,15 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
             padded_params = previous_params
 
     # 2. Initialize a batched parameter tensor of shape (30, 2, layers)
+    dtype = jnp.float32
+
     def init_params(key):
         return jax.random.uniform(
             key,
             shape=(2, qaoa_params.layers),
             minval=-jnp.pi,
             maxval=jnp.pi,
-            dtype=jnp.float64,
+            dtype=dtype,
         )
 
     optimizer = optax.adam(learning_rate=qaoa_params.optimiser_stepsize)
@@ -80,11 +82,11 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
 
             return final_params, new_opt_state, cost_val
 
-        return jax.vmap(single_update_step, in_axes=0)(params_batch, opt_state_batch, converged_mask)
+        return jax.vmap(single_update_step, in_axes=(0, 0, 0))(params_batch, opt_state_batch, converged_mask)
 
     @jax.jit
     def batched_sample(params_batch):
-        return jax.vmap(sample_function, in_axes=0)(params_batch)
+        return jax.vmap(sample_function)(params_batch)
 
 
     all_final_probs = []
@@ -165,13 +167,15 @@ def sequential_qaoa(cost_function, sample_function, qaoa_params, seed_versions, 
     original_num_seeds = len(seed_versions)
     logger.debug(f"[Sequential Tracker] Executing {original_num_seeds} Seeds Sequentially")
     padded_params = None
+    dtype = jnp.float32
+
     def init_params(key):
         return jax.random.uniform(
             key,
             shape=(2, qaoa_params.layers),
             minval=-jnp.pi,
             maxval=jnp.pi,
-            dtype=jnp.float64,
+            dtype=dtype,
         )
 
     optimizer = optax.adam(learning_rate=qaoa_params.optimiser_stepsize)
@@ -213,7 +217,7 @@ def sequential_qaoa(cost_function, sample_function, qaoa_params, seed_versions, 
             current_params = padded_params[i]
 
         current_opt_state = optimizer.init(current_params)
-        best_cost = jnp.array(jnp.inf)
+        best_cost = jnp.array(jnp.inf, dtype=dtype)
         patience_counter = 0
         converged = False
 

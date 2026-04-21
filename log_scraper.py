@@ -2,7 +2,7 @@ import pathlib
 from collections import defaultdict
 import pandas as pd
 
-log_files = pathlib.Path("QAOA_Results_Backup 2").rglob("*.log")
+log_files = pathlib.Path("QAOA_Results_Backup_3").rglob("*.log")
 
 runtimes = defaultdict(list)
 
@@ -68,4 +68,4 @@ for qubits, tup in sorted(runtimes.items()):
         data.append({"Qubits": qubits, "Total Layers": layer_count, "Time (s)": time})
 df = pd.DataFrame(data)
 print(df)
-df.to_pickle("colab_runtimes.pkl")
+df.to_pickle("colab_runtimes2.pkl")

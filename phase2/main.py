@@ -2,7 +2,7 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass
 
-from extraction import
+# from extraction import
 import pyrosetta
 
 from extraction.initialisation import initialize_rosetta
@@ -48,6 +48,7 @@ def get_sample_function_for_phase_2(logger: logging.Logger, one_body, two_body, 
 def extract_best_qaoa_params(qaoa_file_path: str):
     assert qaoa_file_path.endswith(".npz"), "Expected a .npz file containing the QAOA results"
     data = np.load(qaoa_file_path, allow_pickle=True)
+    print(data)
 
     # Act as an oracle to extract the relevant data for the next phase
     # We refrain from looking at the actual values, but we know the structure of the saved data from the layered_run function
@@ -159,17 +160,28 @@ if __name__ == "__main__":
     initialize_rosetta(pyrosetta, extra_flags="-mute all")
     fac = TestInstanceFactory()
 
-    inst = fac.create_test_instance_from_func(
-        pose_func=lambda : pyrosetta.pose_from_pdb("data/AF-P00974-F1-model_v6.pdb"),
-        test_name="AF-5PTI",
-        start=20,
-        end=24,
-        rot_count=4
+
+
+    # inst = fac.create_test_instance_from_func(
+    #     pose_func=lambda : pyrosetta.pose_from_pdb("data/AF-P00974-F1-model_v6.pdb"),
+    #     test_name="AF-5PTI",
+    #     start=13,
+    #     end=17,
+    #     rot_count=5
+    # )
+
+    inst = fac.create_test_instance(
+        protein="5PTI",
+        start=13,
+        end=17,
+        rot_count=5
     )
+
+    results_file = "5pti/metrics/5PTI_13_17_5_12_layers.npz"
 
     one_body, two_body, pose, residue_library, ig, rot_sets, scorefxn = extract_one_body_energies_from_instance(inst, logging.getLogger("rescoring_phase2"))
     sample_func, basic_params = get_sample_function_for_phase_2(logging.getLogger("rescoring_phase2"), one_body, two_body, shots=1000)
-    best_params = extract_best_qaoa_params("results/5PTI_12_layers.npz")
+    best_params = extract_best_qaoa_params(results_file)
     processed_results, unique_bitstrings = get_and_process_shot_results(sample_func, best_params, logging.getLogger("rescoring_phase2"))
 
     scored_conformations = evaluate_pyrosetta_energies(unique_bitstrings, pose, scorefxn, residue_library, basic_params)

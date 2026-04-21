@@ -1,8 +1,6 @@
 import logging
-from collections import defaultdict
 from dataclasses import dataclass
 
-# from extraction import
 import pyrosetta
 
 from extraction.initialisation import initialize_rosetta
@@ -19,6 +17,7 @@ from qaoa.generators import qaoa_func_generator
 from qaoa.h_mixer import ring_xy_mixer_layer
 from qaoa.hamiltonians import extract_ising_items
 from qaoa.objects import init_basic_params, BasicParams
+import pandas as pd
 
 
 def extract_one_body_energies_from_instance(inst: ExtractionTestInstance, logger: logging.Logger):
@@ -32,8 +31,14 @@ def extract_one_body_energies_from_instance(inst: ExtractionTestInstance, logger
     one_body, two_body, global_offset = from_energies_to_tensors(residue_library, ig)
     return one_body, two_body, pose, residue_library, ig, rot_sets, scorefxn
 
-def get_sample_function_for_phase_2(logger: logging.Logger, one_body, two_body, shots):
+qubit_to_shot_map = {
+    5: 10, 6: 10, 7: 100, 8: 10, 9: 100, 10: 100, 11: 100, 12: 100, 13: 100, 14: 100, 18: 100, 22: 1000
+}
+
+def get_sample_function_for_phase_2(logger: logging.Logger, one_body, two_body):
     basic_params: BasicParams = init_basic_params(one_body)
+    num_qubits = basic_params.num_qubits
+    shots = qubit_to_shot_map.get(num_qubits, 500)  # Default to 500 shots if not specified
 
     coeffs, observables, num_qubits = extract_ising_items(one_body, two_body, logger)
     cost_hamiltonian = qml.dot(coeffs, observables)
@@ -68,7 +73,7 @@ def get_and_process_shot_results(sample_func, best_params, logger: logging.Logge
     processed_results = {}
 
     for seed, shots in shot_results.items():
-        unique_shots = set(tuple(shot) for shot in shots)
+        unique_shots = set(tuple(map(int, shot)) for shot in shots)
         unique_bitstrings.update(unique_shots)
         processed_results[seed] = unique_shots
 
@@ -162,42 +167,58 @@ if __name__ == "__main__":
 
 
 
-    # inst = fac.create_test_instance_from_func(
-    #     pose_func=lambda : pyrosetta.pose_from_pdb("data/AF-P00974-F1-model_v6.pdb"),
-    #     test_name="AF-5PTI",
-    #     start=13,
-    #     end=17,
-    #     rot_count=5
-    # )
-
-    inst = fac.create_test_instance(
-        protein="5PTI",
-        start=13,
-        end=17,
-        rot_count=5
+    inst = fac.create_test_instance_from_func(
+        pose_func=lambda : pyrosetta.pose_from_pdb("../pdb_files/AF-P00974-F1-model_v6.pdb"),
+        test_name="AF-5PTI",
+        start=52,
+        end=55,
+        rot_count=4
     )
 
-    results_file = "5pti/metrics/5PTI_13_17_5_12_layers.npz"
+    results_file = "0/phase2_5_to_10_qubits/AF-5PTI_52_55_4_12_layers.npz"
 
+    logger.info(f"Extracting one-body and two-body energies for instance {inst.test_name}...")
     one_body, two_body, pose, residue_library, ig, rot_sets, scorefxn = extract_one_body_energies_from_instance(inst, logging.getLogger("rescoring_phase2"))
-    sample_func, basic_params = get_sample_function_for_phase_2(logging.getLogger("rescoring_phase2"), one_body, two_body, shots=1000)
+    sample_func, basic_params = get_sample_function_for_phase_2(logging.getLogger("rescoring_phase2"), one_body, two_body)
+
+    logger.info("Extracting best QAOA parameters from file...")
     best_params = extract_best_qaoa_params(results_file)
     processed_results, unique_bitstrings = get_and_process_shot_results(sample_func, best_params, logging.getLogger("rescoring_phase2"))
 
+    logger.info("Evaluating PyRosetta energies for unique bitstrings...")
     scored_conformations = evaluate_pyrosetta_energies(unique_bitstrings, pose, scorefxn, residue_library, basic_params)
     base_conformation = RescoringConformation(bitstring=None, pose=pose, biological_energy=np.float64(scorefxn(pose)))
     compare_scoring_results(scored_conformations, base_conformation, logger)
 
     best_conf_per_seed = extract_best_conformation_for_seeds(processed_results, scored_conformations)
     epsilon_value = 1.5
+
+    results = []
+    win_count, tie_count, loss_count = 0, 0, 0
     for seed, conf in best_conf_per_seed.items():
+        results.append({
+            'seed': seed,
+            'bitstring': conf.bitstring,
+            'biological_energy': conf.biological_energy,
+            'energy_diff': conf.energy_diff
+            'protein': inst.test_name.split("_")[0],
+            'residues': f"{inst.residue_start}_{inst.residue_end}",
+            'residue_count': inst.residue_end - inst.residue_start + 1,
+            'rotamers': inst.rotamer_count
+        })
+
         logger.info(f"Seed {seed}: Best Bitstring: {conf.bitstring}, Biological Energy: {conf.biological_energy:.4f}, Energy Difference: {conf.energy_diff:.4f}")
         if abs(conf.energy_diff) < epsilon_value:
-            logger.info(f"Seed {seed} is too close to the original pose (Energy difference {conf.energy_diff:.4f} < {epsilon_value}), it's a tie.")
+            logger.debug(f"Seed {seed} is too close to the original pose (Energy difference {conf.energy_diff:.4f} < {epsilon_value}), it's a tie.")
+            tie_count += 1
         elif conf.energy_diff < 0:
-            logger.info(f"Seed {seed} has a better conformation than the original pose (Energy difference {conf.energy_diff:.4f} < 0), it's a success!")
+            logger.debug(f"Seed {seed} has a better conformation than the original pose (Energy difference {conf.energy_diff:.4f} < 0), it's a success!")
+            win_count += 1
         else:
-            logger.info(f"Seed {seed} has a worse conformation than the original pose (Energy difference {conf.energy_diff:.4f} > 0), it's a failure.")
+            logger.debug(f"Seed {seed} has a worse conformation than the original pose (Energy difference {conf.energy_diff:.4f} > 0), it's a failure.")
+            loss_count += 1
+    logger.info(f"Summary of results: {win_count} wins, {tie_count} ties, {loss_count} losses out of {len(best_conf_per_seed)} seeds.")
 
 
+    pd.DataFrame(results).to_pickle("phase2_results.pkl")
 

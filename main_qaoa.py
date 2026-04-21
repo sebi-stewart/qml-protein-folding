@@ -112,7 +112,7 @@ def main(file_path, logger, results_dir):
     dev = get_cached_device(num_qubits, device_type)
     logger.info(f"Running on {device_type} for {num_qubits} qubits")
     logger.info(
-        f"Catalyst/qjit backend | mode={QAOA_EXECUTION_MODE} | seeds={QAOA_NUM_SEEDS}"
+        f"JIT backend | mode={QAOA_EXECUTION_MODE} | seeds={QAOA_NUM_SEEDS}"
     )
 
     cost_func, sample_func = qaoa_func_generator(dev, cost_hamiltonian, ring_xy_mixer_layer, basic_params)
@@ -130,8 +130,8 @@ def main(file_path, logger, results_dir):
         result_path = f"{results_dir}/{artifact_base_name}_{layers}_layers.npz"
         cached_params = layered_run(cost_func, sample_func, target_indices, valid_conformations, num_qubits, layers, result_path, cached_params)
 
-def find_limit_energy_files(qubit_counts, limit_files_per_qubit, start_file_idx):
-    all_energy_files = {num_qubits: list(pathlib.Path(f"extraction/alt_energies/{num_qubits}").glob("*.pkl")) for num_qubits in qubit_counts}
+def find_limit_energy_files(qubit_counts, limit_files_per_qubit, start_file_idx, source_folder="extraction/alt_energies"):
+    all_energy_files = {num_qubits: list(pathlib.Path(f"{source_folder}/{num_qubits}").glob("*.pkl")) for num_qubits in qubit_counts}
     energy_files = {num_qubits: [] for num_qubits in qubit_counts}
     for num_qubits, files in all_energy_files.items():
         if start_file_idx > len(files): continue
@@ -150,19 +150,19 @@ def define_total_processing_estimate(energy_files):
 
 if __name__ == '__main__':
     # Run QAOA for these qubit counts
-    qubit_counts = [14, 18, 22]
+    qubit_counts = [5, 6, 7, 8, 9, 10]
     limit_files_per_qubit = 5 # Adjust this to limit the number of files processed per qubit count
     start_file_idx = 0
-    temp_base = "temp4"
+    temp_base = "Phase2"
 
     # Limit the number of files processed per qubit count to manage total runtime
-    energy_files = find_limit_energy_files(qubit_counts, limit_files_per_qubit, start_file_idx)
+    energy_files = find_limit_energy_files(qubit_counts, limit_files_per_qubit, start_file_idx, source_folder="extraction/Phase2_energies")
     total_processing_estimate = define_total_processing_estimate(energy_files)
 
 
     temp_dir = f"{temp_base}/{start_file_idx}"
-    results_dir = f"{temp_dir}/qaoa_only_5_8_no_batching"
-    logger = setup_logging(f"{temp_dir}", "No_batching_5_8_qubits")
+    results_dir = f"{temp_dir}/phase2_5_to_10_qubits"
+    logger = setup_logging(f"{temp_dir}", "phase2_5_to_10_qubits_qaoa_runs")
     pathlib.Path(results_dir).mkdir(exist_ok=True, parents=True)
 
     logger.info("Starting QAOA Runs for qubit counts: " + ", ".join(

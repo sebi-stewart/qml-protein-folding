@@ -36,7 +36,8 @@ def extract_top_n_rotamers(base_pose: pyrosetta.Pose, logger: logging.Logger, n=
     # we will modify this to only take into account hyrogen interactions and
     logger.debug("Creating score function")
     scorefxn = get_fa_scorefxn()
-    scorefxn(base_pose)
+    base_pose_score = scorefxn(base_pose)
+    logger.info(f"Initial Pose Score: {base_pose_score:.2f}")
 
     logger.debug("Creating Repacking Task - Core Rotamer Optimisation Protocol")
 
@@ -46,6 +47,7 @@ def extract_top_n_rotamers(base_pose: pyrosetta.Pose, logger: logging.Logger, n=
     scorefxn.setup_for_packing(base_pose, task.repacking_residues(), task.designing_residues())
 
     packer_neighbour_graph = pack.create_packer_graph(base_pose, scorefxn, task)
+    print("Number of edges in the packer neighbor graph:", packer_neighbour_graph.num_edges())
 
     rot_sets = pack.rotamer_set.RotamerSets()
     rot_sets.set_task(task)
@@ -62,26 +64,30 @@ def extract_top_n_rotamers(base_pose: pyrosetta.Pose, logger: logging.Logger, n=
         seqpos = rot_sets.moltenres_2_resid(moltenres_id)
         logger.debug(f"Moltenres ID: {moltenres_id}, SeqPos ID: {seqpos}")
 
+        print("Default rotamer angles:", base_pose.residue(seqpos).chi())
+
         # Get all rotamers for the chosen residue
         n_rots = rot_sets.rotamer_set_for_moltenresidue(moltenres_id).num_rotamers()
-        scored_rotamers = []
+        scored_rotamers: list[TrackedRotamer] = []
 
         # extract one body energies for each rotamer
         for rot_index in range(1, n_rots + 1):
             energy = ig.get_one_body_energy_for_node_state(moltenres_id, rot_index)
 
             rotamer_res = rot_sets.rotamer_set_for_moltenresidue(moltenres_id).rotamer(rot_index)
-            scored_rotamers.append((energy, rot_index, rotamer_res))
+            scored_rotamers.append(
+                TrackedRotamer(
+                    one_body_energy=energy,
+                    original_pyrosetta_index=rot_index,
+                    residue=rotamer_res
+                )
+            )
+            print("Cur rotamer angles:", rotamer_res.chi())
 
         # Keep the lowest N energy rotamer states, throw out the rest
-        scored_rotamers.sort(key=lambda x: x[0])
+        scored_rotamers.sort(key=lambda x: x.one_body_energy)
         top_n_rotamers = []
-        for energy, rot_index, rotamer_res in scored_rotamers[:n]:
-            tracked_rotamer = TrackedRotamer(
-                one_body_energy=energy,
-                original_pyrosetta_index=rot_index,
-                residue=rotamer_res
-            )
+        for tracked_rotamer in scored_rotamers[:n]:
             top_n_rotamers.append(tracked_rotamer)
 
         residue_library[seqpos] = TrackedResidue(moltenres_id, seqpos, top_n_rotamers)
@@ -94,6 +100,17 @@ def extract_top_n_rotamers(base_pose: pyrosetta.Pose, logger: logging.Logger, n=
 def create_packing_task(base_pose, active_start, active_end):
     tf = pack.task.TaskFactory()
     tf.push_back(pack.task.operation.RestrictToRepacking())
+    tf.push_back(pack.task.operation.NoRepackDisulfides())
+
+    #We don't include the current, since we want to get the energies of the rotamers relative to the current state, and including the current would just give us a bunch of zero-energy rotamers that are identical to the starting structure.
+    # By excluding the current, we can focus on the energies of the new rotamers and get a better sense of which ones are more favorable compared to the original conformation.
+
+    extra_rotamers = pack.task.operation.ExtraRotamersGeneric()
+    extra_rotamers.ex1(True)
+    extra_rotamers.ex2(True)
+    extra_rotamers.extrachi_cutoff(0)
+    tf.push_back(extra_rotamers) # Ex1, Ex2, Ex3
+
     packer_task = tf.create_task_and_apply_taskoperations(base_pose)
 
     total_residues = base_pose.total_residue()

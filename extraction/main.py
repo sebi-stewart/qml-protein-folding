@@ -40,6 +40,7 @@ class TestInstanceFactory:
 
     @staticmethod
     def create_test_instance_from_func(pose_func: Callable[[], pyrosetta.Pose], test_name: str, start: int, end: int, rot_count: int) -> ExtractionTestInstance:
+        test_name = f"{test_name}_{start}_{end}_{rot_count}"
         return ExtractionTestInstance(
             pose_func=pose_func,
             test_name=test_name,
@@ -103,12 +104,16 @@ if __name__ == '__main__':
     test_instances = []
     logger.info("Creating test instances...")
     for residue_length in range(4, 9):
-        for start_pos in range(10, 25):
-            # test_instances.append(fac.create_test_instance("5PTI", start_pos, start_pos + residue_length - 1, rot_count=3))
-            # test_instances.append(fac.create_test_instance("5PTI", start_pos, start_pos + residue_length - 1, rot_count=4))
-            test_instances.append(fac.create_test_instance("5PTI", start_pos, start_pos + residue_length - 1, rot_count=5))
-            test_instances.append(fac.create_test_instance("5PTI", start_pos, start_pos + residue_length - 1, rot_count=6))
-            test_instances.append(fac.create_test_instance("5PTI", start_pos, start_pos + residue_length - 1, rot_count=7))
+        for start_pos in range(50, 65):
+            for rot_count in range(3, 8):
+                inst = fac.create_test_instance_from_func(
+                    pose_func=lambda : pyrosetta.pose_from_pdb("../pdb_files/AF-P00974-F1-model_v6.pdb"),
+                    test_name="AF-5PTI",
+                    start=start_pos,
+                    end=start_pos + residue_length - 1,
+                    rot_count=rot_count
+                )
+                test_instances.append(inst)
     logger.info(f"Created {len(test_instances)} test instances.")
 
 

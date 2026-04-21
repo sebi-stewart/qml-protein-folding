@@ -10,15 +10,39 @@ EARLY_STOPPING_DELTA = 1e-4
 
 
 def _retrieve_batch_size(num_qubits: int, max_memory_gb: float, original_num_seeds: int):
+    if num_qubits <= 14: return 30  # For smaller qubit counts, we can afford to run all seeds together without memory issues.
+
     bytes_per_state = (2 ** num_qubits) * 16
     bytes_per_seed = 3 * bytes_per_state * 1.2
     b_max = math.floor((max_memory_gb * (1024 ** 3)) / bytes_per_seed)
     if b_max < 1:
         raise MemoryError(f"Insufficient memory ({max_memory_gb}GB) to run even a single seed for {num_qubits} qubits.")
 
-    compiler_cap = int(30 - ((num_qubits - 8) * (3/2))) if num_qubits > 8 else 30
+    compiler_cap = 6
 
     return min(compiler_cap, b_max, original_num_seeds)
+
+
+def _align_previous_params(previous_params, target_seed_count: int, target_layers: int, seed_versions):
+    """Pad or trim warm-start parameters so they match the current run shape."""
+    if previous_params is None:
+        return None
+
+    prev_seed_count, _, prev_layers = previous_params.shape
+    aligned = previous_params[: min(prev_seed_count, target_seed_count), :, : min(prev_layers, target_layers)]
+
+    seed_padding = max(target_seed_count - aligned.shape[0], 0)
+    layer_padding = max(target_layers - aligned.shape[2], 0)
+
+    if seed_padding or layer_padding:
+        aligned = jnp.pad(aligned, ((0, seed_padding), (0, 0), (0, layer_padding)))
+
+    if target_layers > prev_layers:
+        noise_key = jax.random.PRNGKey(seed_versions[0] + target_layers)
+        noise = jax.random.normal(noise_key, shape=(target_seed_count, 2, target_layers - prev_layers)) * 1e-4
+        aligned = aligned.at[:, :, prev_layers:target_layers].add(noise)
+
+    return aligned
 
 def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num_qubits: int, max_memory_gb: float, logger: logging.Logger, previous_params=None):
     """
@@ -34,26 +58,7 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
 
     master_key = jax.random.PRNGKey(seed_versions[0])
     keys = jax.random.split(master_key, padded_total_seeds)
-    padded_params = None
-
-    # --- WARM START LOGIC: Handle padding and noise globally before the batch loop ---
-    if previous_params is not None:
-        prev_layers = previous_params.shape[2]
-        new_layers = qaoa_params.layers - prev_layers
-
-        if new_layers > 0:
-            # 1. Pad the existing parameters with zeros for the new layers
-            # Shape transitions from (batch, 2, prev_layers) to (batch, 2, prev_layers + new_layers)
-            padded_params = jnp.pad(previous_params, ((0, 0), (0, 0), (0, new_layers)))
-
-            # 2. Generate tiny noise for the new layers to break symmetry
-            noise_key = jax.random.PRNGKey(seed_versions[0] + qaoa_params.layers)
-            noise = jax.random.normal(noise_key, shape=(padded_total_seeds, 2, new_layers)) * 1e-4
-
-            # 3. Add noise ONLY to the newly added layers
-            padded_params = padded_params.at[:, :, prev_layers:].add(noise)
-        else:
-            padded_params = previous_params
+    padded_params = _align_previous_params(previous_params, padded_total_seeds, qaoa_params.layers, seed_versions)
 
     # 2. Initialize a batched parameter tensor of shape (30, 2, layers)
     dtype = jnp.float32
@@ -112,6 +117,7 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
         best_costs = jnp.full(batch_size, jnp.inf)
         patience_counters = jnp.zeros(batch_size, dtype=jnp.int32)
         converged_mask = jnp.zeros(batch_size, dtype=jnp.bool_)
+        batched_costs = best_costs
 
         # Epoch Loop for this chunk
         for epoch in range(qaoa_params.epochs):
@@ -131,6 +137,9 @@ def batched_qaoa(cost_function, sample_function, qaoa_params, seed_versions, num
             patience_counters = jnp.where(improved, 0, patience_counters + 1)
             converged_mask = patience_counters >= EARLY_STOPPING_PATIENCE
             if jnp.all(converged_mask):
+                remaining_epochs = qaoa_params.epochs - epoch - 1
+                if remaining_epochs > 0:
+                    batch_cost_history.extend([best_costs] * remaining_epochs)
                 logger.debug(
                     f"\t[EPOCH Tracker] Early stopping triggered at epoch {epoch} for all seeds in this batch.")
                 break
@@ -166,7 +175,6 @@ def sequential_qaoa(cost_function, sample_function, qaoa_params, seed_versions, 
 
     original_num_seeds = len(seed_versions)
     logger.debug(f"[Sequential Tracker] Executing {original_num_seeds} Seeds Sequentially")
-    padded_params = None
     dtype = jnp.float32
 
     def init_params(key):
@@ -195,17 +203,7 @@ def sequential_qaoa(cost_function, sample_function, qaoa_params, seed_versions, 
     all_cost_histories = []
     all_optimized_params = []
 
-    if previous_params is not None:
-        prev_layers = previous_params.shape[2]
-        new_layers = qaoa_params.layers - prev_layers
-
-        if new_layers > 0:
-            padded_params = jnp.pad(previous_params, ((0, 0), (0, 0), (0, new_layers)))
-            noise_key = jax.random.PRNGKey(seed_versions[0] + qaoa_params.layers)
-            noise = jax.random.normal(noise_key, shape=(original_num_seeds, 2, new_layers)) * 1e-4
-            padded_params = padded_params.at[:, :, prev_layers:].add(noise)
-        else:
-            padded_params = previous_params
+    padded_params = _align_previous_params(previous_params, original_num_seeds, qaoa_params.layers, seed_versions)
 
     for i, seed in enumerate(seed_versions):
         logger.debug(f"[Sequential Tracker] Seed {i + 1} / {original_num_seeds}")

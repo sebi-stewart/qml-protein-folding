@@ -42,4 +42,10 @@ def setup_logging(log_dir_base: str, log_file: str = "myapp") -> logging.Logger:
     logger.info("Logging initialized. Application logs are isolated from JAX.\n")
     logger.debug("This debug message will only appear in the file.\n")
 
+    # Add a "hidden" logger that won't propogate to console, but will save all of my other results in the file
+    hidden_logger = logging.getLogger("qaoa.hidden")
+    hidden_logger.setLevel(logging.DEBUG)
+    hidden_logger.propagate = False
+    hidden_logger.addHandler(file_handler)
+
     return logger

@@ -10,6 +10,14 @@ class TrackedRotamer:
     one_body_energy: float
     original_pyrosetta_index: int
     residue: object
+    chi_angles: tuple[float, ...]
+
+def circular_angle_diff(angle1: float, angle2: float) -> float:
+    """
+    Computes the minimum difference between two angles, accounting for circularity.
+    """
+    diff = abs(angle1 - angle2) % 360
+    return min(diff, 360 - diff)
 
 @dataclass
 class TrackedResidue:
@@ -47,7 +55,7 @@ def extract_top_n_rotamers(base_pose: pyrosetta.Pose, logger: logging.Logger, n=
     scorefxn.setup_for_packing(base_pose, task.repacking_residues(), task.designing_residues())
 
     packer_neighbour_graph = pack.create_packer_graph(base_pose, scorefxn, task)
-    print("Number of edges in the packer neighbor graph:", packer_neighbour_graph.num_edges())
+    # print("Number of edges in the packer neighbor graph:", packer_neighbour_graph.num_edges())
 
     rot_sets = pack.rotamer_set.RotamerSets()
     rot_sets.set_task(task)
@@ -64,7 +72,7 @@ def extract_top_n_rotamers(base_pose: pyrosetta.Pose, logger: logging.Logger, n=
         seqpos = rot_sets.moltenres_2_resid(moltenres_id)
         logger.debug(f"Moltenres ID: {moltenres_id}, SeqPos ID: {seqpos}")
 
-        print("Default rotamer angles:", base_pose.residue(seqpos).chi())
+        # print("Default rotamer angles:", base_pose.residue(seqpos).chi())
 
         # Get all rotamers for the chosen residue
         n_rots = rot_sets.rotamer_set_for_moltenresidue(moltenres_id).num_rotamers()
@@ -73,23 +81,42 @@ def extract_top_n_rotamers(base_pose: pyrosetta.Pose, logger: logging.Logger, n=
         # extract one body energies for each rotamer
         for rot_index in range(1, n_rots + 1):
             energy = ig.get_one_body_energy_for_node_state(moltenres_id, rot_index)
-
             rotamer_res = rot_sets.rotamer_set_for_moltenresidue(moltenres_id).rotamer(rot_index)
+
+            chi_tuple = tuple(rotamer_res.chi(i) for i in range(1, rotamer_res.nchi() + 1))
+
             scored_rotamers.append(
                 TrackedRotamer(
                     one_body_energy=energy,
                     original_pyrosetta_index=rot_index,
-                    residue=rotamer_res
+                    residue=rotamer_res,
+                    chi_angles=chi_tuple
                 )
             )
-            print("Cur rotamer angles:", rotamer_res.chi())
+            # print("Cur rotamer angles:", rotamer_res.chi())
 
         # Keep the lowest N energy rotamer states, throw out the rest
         scored_rotamers.sort(key=lambda x: x.one_body_energy)
         top_n_rotamers = []
-        for tracked_rotamer in scored_rotamers[:n]:
-            top_n_rotamers.append(tracked_rotamer)
 
+        WELL_THRESHOLD = 40.0
+
+        for tracked_rotamer in scored_rotamers:
+            is_novel_well = True
+            for accepted in top_n_rotamers:
+                if not tracked_rotamer.chi_angles: break
+
+                max_diff = max(circular_angle_diff(c, a) for c, a in zip(tracked_rotamer.chi_angles, accepted.chi_angles))
+                if max_diff < WELL_THRESHOLD:
+                    is_novel_well = False
+                    break
+
+            if is_novel_well:
+                top_n_rotamers.append(tracked_rotamer)
+            if len(top_n_rotamers) >= n:
+                break
+
+        # print("Accepted rotamer angles:", [r.chi_angles for r in top_n_rotamers])
         residue_library[seqpos] = TrackedResidue(moltenres_id, seqpos, top_n_rotamers)
 
     logger.info("==================== Rotamer Energy Extraction Complete ====================")

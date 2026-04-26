@@ -103,9 +103,9 @@ if __name__ == '__main__':
 
     test_instances = []
     logger.info("Creating test instances...")
-    for residue_length in range(4, 9):
-        for start_pos in range(50, 65):
-            for rot_count in range(3, 8):
+    for residue_length in range(3, 8):
+        for start_pos in range(4, 14):
+            for rot_count in range(2, 7):
                 inst = fac.create_test_instance_from_func(
                     pose_func=lambda : pyrosetta.pose_from_pdb("../pdb_files/AF-P00974-F1-model_v6.pdb"),
                     test_name="AF-5PTI",

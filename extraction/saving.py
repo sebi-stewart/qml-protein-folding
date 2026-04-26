@@ -5,7 +5,7 @@ ENERGIES_SMALL = "energies/small"
 ENERGIES_LARGE = "energies/large"
 ENERGIES_TOO_LARGE = "energies/too_large"
 
-ENERGIES_ALT_FOLDER = "Phase2_energies_extra_rotamer_angles"
+ENERGIES_ALT_FOLDER = "Phase2_lower_confidence_region"
 ALT_ENERGIES_FOLDER_COLLECTION = [f"{ENERGIES_ALT_FOLDER}/{i}" for i in range(1, 23)]
 
 def _choose_save_folder(one_body):

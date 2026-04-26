@@ -1,4 +1,5 @@
 import logging
+import sys
 from dataclasses import dataclass
 import pathlib
 
@@ -240,7 +241,7 @@ def main(logger: logging.Logger, fac: TestInstanceFactory, results_file: str = "
 
     if not exhaustive_evaluation:
         logger.debug("Skipping exhaustive evaluation of all conformations. To enable this, set exhaustive_evaluation=True when calling main().")
-        return results
+        return results, best_conf_per_seed[list(best_conf_per_seed.keys())[0]]
 
     X_matrix, indices = _get_valid_bitstrings_matrix(basic_params, logger)
     logger.info("Exhaustively evaluating all conformations from all possible bitstrings (not just the best per seed) to get a more complete picture of the energy landscape...")
@@ -275,26 +276,29 @@ if __name__ == "__main__":
 
     results = []
     worst_confs = []
-    for file in pathlib.Path("Oldruns_without_extra_rotamers").rglob("*_12_layers.npz"):
-        # if "oldruns" in str(file).lower(): continue
-        # if "5PTI_57_60_4_12_layers" not in str(file): continue  # Temporary filter to focus on a specific instance, remove this to run on all files
+    for file in pathlib.Path("22_qubits").rglob("*_12_layers.npz"):
+        if "old" in str(file).lower() or "partial" in str(file).lower(): continue
+        # if "5PTI_6_12" not in str(file): continue  # Temporary filter to focus on a specific instance, remove this to run on all files
 
         logger.info(f"Processing file: {str(file)}")
-        cur_results, worst_conf = main(logger, fac, str(file), exhaustive_evaluation=True)
-        worst_confs.append(worst_conf)
+        cur_results, best_conf = main(logger, fac, str(file), exhaustive_evaluation=False)
+        # best_conf.pose.dump_pdb(f"best_pose_{file.stem}.pdb")
 
         results.extend(cur_results)
 
         logger.info(f"Completed processing for {str(file)}. Current aggregated results count: {len(results)}\n\n\n")
 
-    worst_exhaustive_conf = max(worst_confs, key=lambda conf: conf.energy_diff)
-    logger.info("Overall Worst Conformation Across All Instances:")
-    logger.info(
-        f"Bitstring: {worst_exhaustive_conf.bitstring}, Biological Energy: {worst_exhaustive_conf.biological_energy:.4f}, Energy Difference: {worst_exhaustive_conf.energy_diff:.4f}. Dumped pose to worst_conformation.pdb for further analysis."
-    )
-    worst_pose = worst_exhaustive_conf.pose
-    worst_pose.dump_pdb("worst_conformation.pdb")
+    # worst_exhaustive_conf = max(worst_confs, key=lambda conf: conf.energy_diff)
+    # logger.info("Overall Worst Conformation Across All Instances:")
+    # logger.info(
+    #     f"Bitstring: {worst_exhaustive_conf.bitstring}, Biological Energy: {worst_exhaustive_conf.biological_energy:.4f}, Energy Difference: {worst_exhaustive_conf.energy_diff:.4f}. Dumped pose to worst_conformation.pdb for further analysis."
+    # )
+    # worst_pose = worst_exhaustive_conf.pose
+    # logger.info("Energy breakdown for the worst conformation:")
+    # logger.info(worst_pose.scores)
+    # # worst_pose.energies().show(sys.stdout)
+    # worst_pose.dump_pdb("worst_conformation.pdb")
 
 
-    pd.DataFrame(results).to_pickle("phase2_old_runs2.pkl")
+    pd.DataFrame(results).to_pickle("phase2_22_qubits_high_confidence_results.pkl")
 

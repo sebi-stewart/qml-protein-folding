@@ -5,6 +5,7 @@ import pickle
 import time
 
 import numpy as np
+from random import shuffle
 
 from qaoa.devices import get_cached_device
 from qaoa.h_mixer import ring_xy_mixer_layer
@@ -167,14 +168,14 @@ def define_total_processing_estimate(energy_files):
 
 if __name__ == '__main__':
     # Run QAOA for these qubit counts
-    qubit_counts = [11, 12, 13, 14]
+    qubit_counts = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
     limit_files_per_qubit = 1 # Adjust this to limit the number of files processed per qubit count
     start_file_idx = 4
     INSTANCE_ID = start_file_idx
-    temp_base = "Phase2/11_to_14"
+    temp_base = "Phase2/low_confidence_regions"
 
     # Limit the number of files processed per qubit count to manage total runtime
-    energy_files = find_limit_energy_files(qubit_counts, limit_files_per_qubit, start_file_idx, source_folder="extraction/Phase2_energies_extra_rotamer_angles")
+    energy_files = find_limit_energy_files(qubit_counts, limit_files_per_qubit, start_file_idx, source_folder="extraction/Phase2_lower_confidence_region")
     total_processing_estimate = define_total_processing_estimate(energy_files)
 
 
@@ -187,7 +188,8 @@ if __name__ == '__main__':
         f"{num_qubits} ({len(files)} files)" for num_qubits, files in energy_files.items()))
 
     current_processed = 0
-    for qubit_count in reversed(qubit_counts):  # high to low
+    shuffle(qubit_counts)
+    for qubit_count in qubit_counts:  # high to low
         cur_energy_files = energy_files[qubit_count]
         logger.info(f"Processing {len(cur_energy_files)} files for {qubit_count} qubits")
         for energy_file in cur_energy_files:

@@ -276,7 +276,7 @@ if __name__ == "__main__":
 
     results = []
     worst_confs = []
-    for file in pathlib.Path("22_qubits").rglob("*_12_layers.npz"):
+    for file in pathlib.Path("18_qubits").rglob("*_12_layers.npz"):
         if "old" in str(file).lower() or "partial" in str(file).lower(): continue
         # if "5PTI_6_12" not in str(file): continue  # Temporary filter to focus on a specific instance, remove this to run on all files
 
@@ -300,5 +300,5 @@ if __name__ == "__main__":
     # worst_pose.dump_pdb("worst_conformation.pdb")
 
 
-    pd.DataFrame(results).to_pickle("phase2_22_qubits_high_confidence_results.pkl")
+    pd.DataFrame(results).to_pickle("phase2_18_qubits_high_confidence_results.pkl")
 

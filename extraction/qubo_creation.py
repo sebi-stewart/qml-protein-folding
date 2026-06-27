@@ -3,8 +3,6 @@ from pyrosetta.rosetta.core.pack.interaction_graph import InteractionGraphFactor
 
 from extraction.objects import TrackedResidue
 
-import numpy as np
-
 def _extract_hamiltonian_tensors(residue_library: dict[int, TrackedResidue], ig: InteractionGraphFactory):
     """
     Extracts the linear (one-body) and quadratic (two-body) energy tensors.

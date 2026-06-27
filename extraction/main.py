@@ -91,7 +91,7 @@ def _setup_folders():
         pathlib.Path(folder).mkdir(exist_ok=True, parents=True)
 
 def setup_extraction():
-    setup_logging("new_runs_qaoa")
+    setup_logging("../outputs/logs/new_runs_qaoa")
     _setup_folders()
     initialize_rosetta(pyrosetta, extra_flags="-mute all")
 

@@ -270,13 +270,13 @@ def main(logger: logging.Logger, fac: TestInstanceFactory, results_file: str = "
     return results, worst_exhaustive_conf
 
 if __name__ == "__main__":
-    logger = setup_logging("rescoring_phase2", "5PTI")
+    logger = setup_logging("../outputs/logs/phase2/rescoring_phase2", "5PTI")
     initialize_rosetta(pyrosetta, extra_flags="-mute all")
     fac = TestInstanceFactory()
 
     results = []
     worst_confs = []
-    for file in pathlib.Path("18_qubits").rglob("*_12_layers.npz"):
+    for file in pathlib.Path("../outputs/phase2/18_qubits").rglob("*_12_layers.npz"):
         if "old" in str(file).lower() or "partial" in str(file).lower(): continue
         # if "5PTI_6_12" not in str(file): continue  # Temporary filter to focus on a specific instance, remove this to run on all files
 

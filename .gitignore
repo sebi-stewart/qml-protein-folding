@@ -5,8 +5,8 @@
 .DS_Store
 .venv
 
-logs
-logs/*
+outputs/logs
+outputs/logs/*
 *.log
 
 *.pkl
@@ -18,3 +18,5 @@ logs/*
 
 __pycache__/
 *.pyc
+
+*.cxs

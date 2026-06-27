@@ -299,5 +299,5 @@ if __name__ == "__main__":
     # worst_pose.dump_pdb("worst_conformation.pdb")
 
 
-    pd.DataFrame(results).to_pickle("phase2_18_qubits_high_confidence_results.pkl")
+    pd.DataFrame(results).to_pickle("../outputs/prev_in_phase2/phase2_18_qubits_high_confidence_results.pkl")
 

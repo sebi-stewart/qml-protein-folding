@@ -5,11 +5,18 @@
 .DS_Store
 .venv
 
-logs
-logs/*
+outputs/logs
+outputs/logs/*
 *.log
 
 *.pkl
 
 *.svg
 *.png
+
+*.npz
+
+__pycache__/
+*.pyc
+
+*.cxs

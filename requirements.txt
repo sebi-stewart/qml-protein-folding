@@ -1,3 +1,6 @@
+catalyst
+pennylane-catalyst
+optax
 matplotlib
 seaborn
 pandas

@@ -1,5 +1,4 @@
 import logging
-import sys
 from dataclasses import dataclass
 import pathlib
 
@@ -9,7 +8,7 @@ from extraction.initialisation import initialize_rosetta
 from extraction.main import TestInstanceFactory, ExtractionTestInstance, run_pyrosetta_obj_extraction, \
     from_energies_to_tensors
 from extraction.rotamers import TrackedResidue
-from logging_setup import setup_logging
+from utils.logging_setup import setup_logging
 
 import numpy as np
 import pennylane as qml

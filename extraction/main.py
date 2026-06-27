@@ -9,9 +9,9 @@ from extraction.initialisation import initialize_rosetta
 
 from extraction.qubo_creation import extract_and_reduce_tensors
 from extraction.rotamers import extract_top_n_rotamers, load_5PTI_pose
-from extraction.saving import save_results, ENERGIES_SMALL, ENERGIES_LARGE, ENERGIES_TOO_LARGE, save_results_alternate, \
+from extraction.saving import ENERGIES_SMALL, ENERGIES_LARGE, ENERGIES_TOO_LARGE, save_results_alternate, \
     ALT_ENERGIES_FOLDER_COLLECTION, ENERGIES_ALT_FOLDER
-from logging_setup import setup_logging
+from utils.logging_setup import setup_logging
 
 
 @dataclass

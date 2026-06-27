@@ -9,11 +9,11 @@ from random import shuffle
 
 from qaoa.devices import get_cached_device
 from qaoa.h_mixer import ring_xy_mixer_layer
-from logging_setup import setup_logging
+from utils.logging_setup import setup_logging
 from qaoa.execution import batched_qaoa, sequential_qaoa
 from qaoa.generators import qaoa_func_generator
 from qaoa.hamiltonians import extract_ising_items
-from constants import IS_LINUX
+from utils.constants import IS_LINUX
 
 import pennylane as qml
 

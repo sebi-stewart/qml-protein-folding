@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from constants import QAOA_LAYERS, OPTIMISER_STEPSIZE, OPTIMISER_EPOCHS
+from utils.constants import QAOA_LAYERS, OPTIMISER_STEPSIZE, OPTIMISER_EPOCHS
 
 
 @dataclass

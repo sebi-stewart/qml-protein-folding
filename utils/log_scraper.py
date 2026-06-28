@@ -68,4 +68,4 @@ for qubits, tup in sorted(runtimes.items()):
         data.append({"Qubits": qubits, "Total Layers": layer_count, "Time (s)": time})
 df = pd.DataFrame(data)
 print(df)
-df.to_pickle("colab_runtimes2.pkl")
+df.to_parquet("colab_runtimes2.parquet", engine="fastparquet")

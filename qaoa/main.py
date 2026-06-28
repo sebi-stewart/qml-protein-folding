@@ -181,12 +181,12 @@ def define_total_processing_estimate(energy_files):
 
 if __name__ == '__main__':
     # Run QAOA for these qubit counts
-    qubit_counts = [4]
+    qubit_counts = [3]
     limit_files_per_qubit = 1 # Adjust this to limit the number of files processed per qubit count
     temp_base = "outputs_2"
 
     # Limit the number of files processed per qubit count to manage total runtime
-    energy_files = find_limit_energy_files(qubit_counts, limit_files_per_qubit, source_folder="intermediates/energy_mappings")
+    energy_files = find_limit_energy_files(qubit_counts, limit_files_per_qubit, source_folder="intermediates/energy_mappings/Phase2_energies")
     total_processing_estimate = define_total_processing_estimate(energy_files)
 
 

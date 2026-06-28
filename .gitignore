@@ -9,7 +9,7 @@ outputs/logs
 outputs/logs/*
 *.log
 
-*.pkl
+*.parquet
 
 *.svg
 *.png

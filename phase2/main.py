@@ -37,7 +37,7 @@ def extract_one_body_energies_from_instance(inst: ExtractionTestInstance, logger
 
 def extract_best_qaoa_params(qaoa_file_path: str):
     assert qaoa_file_path.endswith(".npz"), "Expected a .npz file containing the QAOA results"
-    data = np.load(qaoa_file_path, allow_pickle=True)
+    data = np.load(qaoa_file_path, allow_pickle=False)
 
     # Act as an oracle to extract the relevant data for the next phase
     # We refrain from looking at the actual values, but we know the structure of the saved data from the layered_run function

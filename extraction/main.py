@@ -1,6 +1,9 @@
+import os, sys
+sys.path.append(os.getcwd())  # Ensures import work fine when running from the root directory of the project
+import utils.make_paths_absolute # Important for file paths
+
 import logging
 from dataclasses import dataclass
-import pathlib
 from collections.abc import Callable
 
 import pyrosetta
@@ -9,9 +12,10 @@ from extraction.initialisation import initialize_rosetta
 
 from extraction.qubo_creation import extract_and_reduce_tensors
 from extraction.rotamers import extract_top_n_rotamers, load_5PTI_pose
-from extraction.saving import ENERGIES_SMALL, ENERGIES_LARGE, ENERGIES_TOO_LARGE, save_results_alternate, \
-    ALT_ENERGIES_FOLDER_COLLECTION, ENERGIES_ALT_FOLDER
+from extraction.saving import save_results_alternate, setup_folders
 from utils.logging_setup import setup_logging
+
+import argparse
 
 
 @dataclass
@@ -81,34 +85,54 @@ def main(inst: ExtractionTestInstance):
 
     return save_results_alternate(one_body, two_body, logger, f"{test_name}.pkl")
 
-def _setup_folders():
-    pathlib.Path(ENERGIES_SMALL).mkdir(exist_ok=True, parents=True)
-    pathlib.Path(ENERGIES_LARGE).mkdir(exist_ok=True, parents=True)
-    pathlib.Path(ENERGIES_TOO_LARGE).mkdir(exist_ok=True, parents=True)
 
-    pathlib.Path(ENERGIES_ALT_FOLDER).mkdir(exist_ok=True, parents=True)
-    for folder in ALT_ENERGIES_FOLDER_COLLECTION:
-        pathlib.Path(folder).mkdir(exist_ok=True, parents=True)
-
-def setup_extraction():
-    setup_logging("../outputs/logs/new_runs_qaoa")
-    _setup_folders()
+def setup_extraction(log_dir: str, output_dir: str, log_file: str) -> TestInstanceFactory:
+    setup_logging(log_dir, log_file)
+    setup_folders(output_dir)
     initialize_rosetta(pyrosetta, extra_flags="-mute all")
 
     return TestInstanceFactory()
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test_name", type=str, default="AF-5PTI", help="Name of the test instance")
+    parser.add_argument("--input_pdb", type=str, default="inputs/structural_files/AF-P00974-F1-model_v6.pdb", help="Path to the input PDB file")
+    parser.add_argument("--output_dir", type=str, default="intermediates/energy_mappings", help="Directory to save the extraction results")
+    parser.add_argument("--log_dir", type=str, default="outputs/logs", help="Directory to save the logs")
+    parser.add_argument("--log_file", type=str, default="extraction_main", help="Name of the log file")
+
+    # The following arguments are for the residue segment and rotamer extraction
+    parser.add_argument("--min_residue_length", type=int, default=3, help="Minimum length of the residue segment")
+    parser.add_argument("--max_residue_length", type=int, default=4, help="Maximum length of the residue segment - exclusive upper bound")
+
+    parser.add_argument("--min_start_pos", type=int, default=4, help="Minimum starting residue position (range: 4-5 for AF-5PTI)")
+    parser.add_argument("--max_start_pos", type=int, default=5, help="Maximum starting residue position (range: 4-5 for AF-5PTI) - exclusive upper bound")
+
+    parser.add_argument("--min_rot_count", type=int, default=2, help="Minimum number of rotamers to extract")
+    parser.add_argument("--max_rot_count", type=int, default=3, help="Maximum number of rotamers to extract - exclusive upper bound")
+    args = parser.parse_args()
+
     logger = logging.getLogger("qaoa.main")
-    fac = setup_extraction()
+    fac = setup_extraction(args.log_dir, args.output_dir, args.log_file)
+    input_pdb = args.input_pdb
+
+    min_residue_length = args.min_residue_length
+    max_residue_length = args.max_residue_length
+    min_start_pos = args.min_start_pos
+    max_start_pos = args.max_start_pos
+    min_rot_count = args.min_rot_count
+    max_rot_count = args.max_rot_count
+
+    print(f"Running extraction for test instances with residue lengths {min_residue_length}-{max_residue_length-1}, start positions {min_start_pos}-{max_start_pos-1}, and rotamer counts {min_rot_count}-{max_rot_count-1}.")
 
     test_instances = []
     logger.info("Creating test instances...")
-    for residue_length in range(3, 8):
-        for start_pos in range(4, 14):
-            for rot_count in range(2, 7):
+    for residue_length in range(min_residue_length, max_residue_length):
+        for start_pos in range(min_start_pos, max_start_pos):
+            for rot_count in range(min_rot_count, max_rot_count):
                 inst = fac.create_test_instance_from_func(
-                    pose_func=lambda : pyrosetta.pose_from_pdb("../pdb_files/AF-P00974-F1-model_v6.pdb"),
-                    test_name="AF-5PTI",
+                    pose_func=lambda : pyrosetta.pose_from_pdb(input_pdb),
+                    test_name=args.test_name,
                     start=start_pos,
                     end=start_pos + residue_length - 1,
                     rot_count=rot_count

@@ -1,3 +1,5 @@
+import utils.make_paths_absolute # Inportant for file paths
+
 import logging
 import sys
 from pathlib import Path

@@ -3,8 +3,6 @@ import pathlib
 import numpy as np
 import pandas as pd
 
-from utils import loading_energy_mappings
-
 def file_to_qubit_mappings(energy_file_folders: str):
     """
     Generate a map from energy file paths to their corresponding qubit counts based on the folder structure.
@@ -23,6 +21,7 @@ def file_to_qubit_mappings(energy_file_folders: str):
         except ValueError:
             print(f"Warning: Could not convert '{str_qubit_count}' to an integer for file {file_stem}. Skipping this file.")
     return file_to_qubit_count_mapping
+
 
 def generate_target_probs_df_from_files(result_files, file_to_qubit_count_mapping, target_confidence=0.9999):
     data_keys = ["target_probs"]
@@ -50,15 +49,13 @@ def generate_target_probs_df_from_files(result_files, file_to_qubit_count_mappin
 
     target_probs_records = []
     for name in result_files.keys():
-    # if not name.startswith("5PTI_18_22"): continue
-
+        # if not name.startswith("5PTI_18_22"): continue
         target_probs = result_files[name]["data"]['target_probs']
         # print("Shape of target_probs:", target_probs.shape)  # Should be (30, 16)
 
         # Sum across the 16 conformations for each seed
         summed_probs = target_probs.sum(axis=1)  # Shape becomes (30,)
         # print("Shape after summing across conformations:", summed_probs.shape)
-
 
         # Create a record for each seed with its summed probability
         for seed_idx, summed_prob in enumerate(summed_probs):
@@ -79,3 +76,12 @@ def generate_target_probs_df_from_files(result_files, file_to_qubit_count_mappin
 
     # Create dataframe from records
     return pd.DataFrame(target_probs_records)
+
+
+def get_files_by_folders(results_folders):
+    result_paths = []
+    for results_folder in results_folders:
+        paths = list(pathlib.Path(f"{results_folder}").rglob("*.npz"))
+        result_paths.extend(paths)
+
+    return {path.as_posix().split("/")[-1].split(".")[0]: {"path": path} for path in result_paths}

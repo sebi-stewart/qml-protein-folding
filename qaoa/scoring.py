@@ -33,7 +33,7 @@ def _evaluate_all_qubo_energies(X_matrix, h_dense, J_dense):
 
     return e_1body + e_2body
 
-def _get_valid_bitstrings_matrix(params: BasicParams, logger: logging.Logger) -> tuple[np.ndarray, np.ndarray]:
+def get_valid_bitstrings_matrix(params: BasicParams, logger: logging.Logger) -> tuple[np.ndarray, np.ndarray]:
     num_qubits = params.num_qubits
     wire_offsets = params.wire_offsets
     seq_positions = params.seq_positions
@@ -79,7 +79,7 @@ def _build_dense_qubo(h_linear: dict, J_quadratic: dict, num_qubits: int, wire_o
     return h_dense, J_dense
 
 def extract_lowest_energy_bitstrings(h_linear, J_quadratic, logger, epsilon, params: BasicParams):
-    X_matrix, indices = _get_valid_bitstrings_matrix(params, logger)
+    X_matrix, indices = get_valid_bitstrings_matrix(params, logger)
     h_dense, J_dense = _build_dense_qubo(h_linear, J_quadratic, params.num_qubits, params.wire_offsets)
 
     energies = _evaluate_all_qubo_energies(

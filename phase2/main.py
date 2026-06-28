@@ -1,3 +1,12 @@
+import argparse
+import os, sys
+
+from phase2.exhaustive_evaluation import run_exhaustive_evaluation
+
+sys.path.append(os.getcwd())  # Ensures import work fine when running from the root directory of the project
+import utils.make_paths_absolute # Important for file paths
+
+import fastparquet as fp
 import logging
 from dataclasses import dataclass
 import pathlib
@@ -19,9 +28,6 @@ from qaoa.h_mixer import ring_xy_mixer_layer
 from qaoa.hamiltonians import extract_ising_items
 from qaoa.objects import init_basic_params, BasicParams
 import pandas as pd
-
-from qaoa.scoring import _get_valid_bitstrings_matrix
-
 from collections import Counter
 
 
@@ -178,13 +184,13 @@ def extract_best_conformation_for_seeds(processed_results: dict[int, set[tuple[i
 
     return best_conformations_per_seed
 
-def main(logger: logging.Logger, fac: TestInstanceFactory, results_file: str = "0/phase2_5_to_10_qubits/AF-5PTI_52_55_4_12_layers.npz", exhaustive_evaluation=False):
+def main(logger: logging.Logger, fac: TestInstanceFactory, results_file, input_pdb, exhaustive_evaluation=False,):
     stripped_file_name = results_file.split("/")[-1].split(".")[0]
     test_name, start_str, end_str, rot_count_str, _, _ = stripped_file_name.split("_")
     start, end, rot_count = int(start_str), int(end_str), int(rot_count_str)
 
     inst = fac.create_test_instance_from_func(
-        pose_func=lambda: pyrosetta.pose_from_pdb("../pdb_files/AF-P00974-F1-model_v6.pdb"),
+        pose_func=lambda: pyrosetta.pose_from_pdb(input_pdb),
         test_name=test_name,
         start=start,
         end=end,
@@ -217,7 +223,7 @@ def main(logger: logging.Logger, fac: TestInstanceFactory, results_file: str = "
     for seed, conf in best_conf_per_seed.items():
         cur_result = {
             'seed': seed,
-            'bitstring': conf.bitstring,
+            'bitstring': list(conf.bitstring),
             'biological_energy': conf.biological_energy,
             'energy_diff': conf.energy_diff,
             'protein': inst.test_name.split("_")[0],
@@ -240,64 +246,53 @@ def main(logger: logging.Logger, fac: TestInstanceFactory, results_file: str = "
 
     if not exhaustive_evaluation:
         logger.debug("Skipping exhaustive evaluation of all conformations. To enable this, set exhaustive_evaluation=True when calling main().")
-        return results, best_conf_per_seed[list(best_conf_per_seed.keys())[0]]
-
-    X_matrix, indices = _get_valid_bitstrings_matrix(basic_params, logger)
-    logger.info("Exhaustively evaluating all conformations from all possible bitstrings (not just the best per seed) to get a more complete picture of the energy landscape...")
-    logger.info(f"Total unique bitstrings to evaluate: {len(X_matrix)}")
-    logger.debug(X_matrix)
-
-    exhaustive_conf = exhaustively_evaluate_all_conformations(X_matrix, pose, scorefxn, residue_library, basic_params)
-    logger.info("Completed exhaustive evaluation of all conformations. Comparing results to identify any additional winning conformations that were not sampled by the QAOA runs...")
-    compare_scoring_results(exhaustive_conf, base_conformation, logger)
-    logger.info("Conformations with better energy than the original pose:")
-    exhaustive_conf = sorted(exhaustive_conf, key=lambda conf: conf.energy_diff)
-    for conf in exhaustive_conf:
-        if conf.energy_diff < 0:
-            logger.info(
-                f"Bitstring: {conf.bitstring}, Biological Energy: {conf.biological_energy:.4f}, Energy Difference: {conf.energy_diff:.4f}")
-        else:
-            break
-    logger.info("Best conformation from the exhaustive search:")
-    best_exhaustive_conf = min(exhaustive_conf, key=lambda conf: conf.energy_diff)
-    worst_exhaustive_conf = max(exhaustive_conf, key=lambda conf: conf.energy_diff)
-    logger.info(
-        f"Bitstring: {best_exhaustive_conf.bitstring}, Biological Energy: {best_exhaustive_conf.biological_energy:.4f}, Energy Difference: {best_exhaustive_conf.energy_diff:.4f}")
-    logger.info(
-        f"Worst Conformation - Bitstring: {worst_exhaustive_conf.bitstring}, Biological Energy: {worst_exhaustive_conf.biological_energy:.4f}, Energy Difference: {worst_exhaustive_conf.energy_diff:.4f}. Dumped pose to worst_conformation.pdb for further analysis."
-    )
-    return results, worst_exhaustive_conf
+        return results, best_conf_per_seed
+    return results, run_exhaustive_evaluation(logger, basic_params, pose, scorefxn, residue_library, base_conformation)
 
 if __name__ == "__main__":
-    logger = setup_logging("../outputs/logs/phase2/rescoring_phase2", "5PTI")
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--input_pdb", type=str, default="inputs/structural_files/AF-P00974-F1-model_v6.pdb", help="Path to the input PDB file")
+    parser.add_argument("--qaoa_results_folder", type=str, default="outputs_2", help="Path to the folder containing QAOA results files (NPZ format)")
+    parser.add_argument("--file_search_pattern", type=str, default="*_12_layers.npz", help="Pattern to search for QAOA result files in the specified folder")
+
+    parser.add_argument("--output_dir", type=str, default="outputs_5", help="Directory to save the extraction results")
+    parser.add_argument("--log_dir", type=str, default="outputs/logs", help="Directory to save the logs")
+    parser.add_argument("--log_file", type=str, default="results_rescoring", help="Name of the log file")
+
+    parser.add_argument("--exhaustive_evaluation", action="store_false", help="Whether to perform exhaustive evaluation of all conformations, and save the best and worst poses to PDB files. If set, this will override the --save_best_pose flag.")
+    parser.add_argument("--parquet_output_dir", type=str, default="outputs_3", help="Path to save the aggregated results in Parquet format")
+    parser.add_argument("--parquet_file_name", type=str, default="test2.parquet", help="Name of the Parquet file to save the aggregated results")
+    parser.add_argument("--save_best_pose", action="store_false", help="Whether to save the best pose to PDB (ignored during exhaustive evaluation)")
+
+    args = parser.parse_args()
+
+    logger = setup_logging(args.log_dir, args.log_file)
     initialize_rosetta(pyrosetta, extra_flags="-mute all")
     fac = TestInstanceFactory()
 
     results = []
-    worst_confs = []
-    for file in pathlib.Path("../outputs/phase2/18_qubits").rglob("*_12_layers.npz"):
+
+    for file in pathlib.Path(args.qaoa_results_folder).rglob(args.file_search_pattern):
         if "old" in str(file).lower() or "partial" in str(file).lower(): continue
-        # if "5PTI_6_12" not in str(file): continue  # Temporary filter to focus on a specific instance, remove this to run on all files
 
         logger.info(f"Processing file: {str(file)}")
-        cur_results, best_conf = main(logger, fac, str(file), exhaustive_evaluation=False)
-        # best_conf.pose.dump_pdb(f"best_pose_{file.stem}.pdb")
+        cur_results, conformations = main(logger, fac, results_file=str(file), input_pdb=args.input_pdb, exhaustive_evaluation=args.exhaustive_evaluation, )
+        if args.exhaustive_evaluation:
+            worst_conf = conformations["worst"]
+            best_conf = conformations["best"]
+            logger.info(f"Best and worst conformations from exhaustive evaluation for {str(file)} - Dumping poses to best_pose_{file.stem}.pdb and worst_conformation_{file.stem}.pdb for further analysis.")
+            best_conf.pose.dump_pdb(f"best_pose_{file.stem}.pdb")
+            worst_conf.pose.dump_pdb(f"worst_conformation_{file.stem}.pdb")
+        elif args.save_best_pose:
+            best_conf = min(conformations.values(), key=lambda conf: conf.energy_diff)
+            logger.info(f"Best conformation for {str(file)}: Bitstring: {best_conf.bitstring}, Biological Energy: {best_conf.biological_energy:.4f}, Energy Difference: {best_conf.energy_diff:.4f}. Dumped pose to best_pose_{file.stem}.pdb for further analysis.")
+            best_conf.pose.dump_pdb(f"best_pose_{file.stem}.pdb")
 
         results.extend(cur_results)
 
         logger.info(f"Completed processing for {str(file)}. Current aggregated results count: {len(results)}\n\n\n")
 
-    # worst_exhaustive_conf = max(worst_confs, key=lambda conf: conf.energy_diff)
-    # logger.info("Overall Worst Conformation Across All Instances:")
-    # logger.info(
-    #     f"Bitstring: {worst_exhaustive_conf.bitstring}, Biological Energy: {worst_exhaustive_conf.biological_energy:.4f}, Energy Difference: {worst_exhaustive_conf.energy_diff:.4f}. Dumped pose to worst_conformation.pdb for further analysis."
-    # )
-    # worst_pose = worst_exhaustive_conf.pose
-    # logger.info("Energy breakdown for the worst conformation:")
-    # logger.info(worst_pose.scores)
-    # # worst_pose.energies().show(sys.stdout)
-    # worst_pose.dump_pdb("worst_conformation.pdb")
-
-
-    pd.DataFrame(results).to_parquet("../outputs/prev_in_phase2/phase2_18_qubits_high_confidence_results.parquet", engine="fastparquet")
-
+    output_dir = pathlib.Path(args.parquet_output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(results).to_parquet(output_dir.joinpath(args.parquet_file_name), engine="fastparquet")

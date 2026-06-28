@@ -4,7 +4,7 @@ import utils.make_paths_absolute # Important for file paths
 
 import logging
 import pathlib
-import pickle
+import json
 import time
 
 import numpy as np
@@ -56,9 +56,17 @@ BASE_EPOCHS = 150
 BASE_STEPSIZE = 0.01
 
 def load_qaoa_data(source_path):
-    with open(source_path, 'rb') as f:
-        energies = pickle.load(f)
-    return energies['one_body'], energies['two_body']
+    with open(source_path, 'r') as f:
+        raw = json.load(f)
+    one_body = {int(k): {int(rk): rv for rk, rv in v.items()} for k, v in raw['one_body'].items()}
+    two_body = {
+        tuple(int(x) for x in k.split(',')): {
+            tuple(int(x) for x in rk.split(',')): rv
+            for rk, rv in interactions.items()
+        }
+        for k, interactions in raw['two_body'].items()
+    }
+    return one_body, two_body
 
 def layered_run(cost_func, sample_func, target_indices, valid_conformations, num_qubits, qaoa_layers, result_path, previous_params=None):
     # previous_params=None
@@ -135,7 +143,7 @@ def main(file_path, logger, results_dir):
         cached_params = layered_run(cost_func, sample_func, target_indices, valid_conformations, num_qubits, layers, result_path, cached_params)
 
 def find_limit_energy_files(qubit_counts, limit_files_per_qubit, source_folder="intermediates/energy_mappings", start_file_idx=0):
-    all_energy_files = {num_qubits: list(pathlib.Path(f"{source_folder}/{num_qubits}").glob("*.pkl")) for num_qubits in qubit_counts}
+    all_energy_files = {num_qubits: list(pathlib.Path(f"{source_folder}/{num_qubits}").glob("*.json")) for num_qubits in qubit_counts}
     print(f"Found energy files for qubit counts: ", all_energy_files)
 
     # Remove duplicate files across qubit counts, ie. if the file analyses the same residue subsection with the same qubit count, but different rotamer counts it should only be processed once.

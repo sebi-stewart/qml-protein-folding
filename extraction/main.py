@@ -83,7 +83,7 @@ def main(inst: ExtractionTestInstance):
 
     one_body, two_body, global_offset = from_energies_to_tensors(residue_library, ig)
 
-    return save_results_alternate(one_body, two_body, logger, f"{test_name}.pkl")
+    return save_results_alternate(one_body, two_body, logger, f"{test_name}.json")
 
 
 def setup_extraction(log_dir: str, output_dir: str, log_file: str) -> TestInstanceFactory:

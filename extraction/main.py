@@ -53,6 +53,20 @@ class TestInstanceFactory:
             rotamer_count=rot_count
         )
 
+    def create_test_instance_from_results_file(self, results_file: str, input_pdb: str) -> ExtractionTestInstance:
+        stripped_file_name = results_file.split("/")[-1].split(".")[0]
+        test_name, start_str, end_str, rot_count_str, _, _ = stripped_file_name.split("_")
+        start, end, rot_count = int(start_str), int(end_str), int(rot_count_str)
+        return self.create_test_instance_from_func(
+            pose_func=lambda: pyrosetta.pose_from_pdb(input_pdb),
+            test_name=test_name,
+            start=start,
+            end=end,
+            rot_count=rot_count
+    )
+
+
+
 def run_pyrosetta_obj_extraction(pose_func, logger: logging.Logger, n=4, active_start=20, active_end=24):
     pose = pose_func()
     residue_library, ig, rot_sets, scorefxn = extract_top_n_rotamers(

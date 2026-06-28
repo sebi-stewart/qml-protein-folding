@@ -1,7 +1,26 @@
 import logging
 
-from phase2.main import exhaustively_evaluate_all_conformations, compare_scoring_results
+import numpy as np
+
+from phase2.biological_rescoring import evaluate_singular_pyrosetta_energy, compare_scoring_results
+from phase2.objects import RescoringConformation
+from qaoa.objects import BasicParams
 from qaoa.scoring import get_valid_bitstrings_matrix
+
+def exhaustively_evaluate_all_conformations(unique_bitstrings, original_pose, scorefxn, residue_library: dict[int, TrackedResidue], params: BasicParams):
+    conformations = []
+    for nd_bitstring in unique_bitstrings:
+        bitstring = list(map(int, nd_bitstring))
+        new_pose = evaluate_singular_pyrosetta_energy(bitstring, original_pose, residue_library, params)
+        biological_energy = np.float64(scorefxn(new_pose))
+        conformations.append(
+            RescoringConformation(
+                bitstring=bitstring,
+                pose=new_pose,
+                biological_energy=biological_energy
+            )
+        )
+    return conformations
 
 def run_exhaustive_evaluation(logger: logging.Logger, basic_params, pose, scorefxn, residue_library, base_conformation):
     X_matrix, indices = get_valid_bitstrings_matrix(basic_params, logger)

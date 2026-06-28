@@ -1,14 +1,15 @@
 import argparse
 import os, sys
 
+from phase2.biological_rescoring import evaluate_pyrosetta_energies, compare_scoring_results
 from phase2.exhaustive_evaluation import run_exhaustive_evaluation
+from phase2.qaoa_shots import take_qaoa_shots
 
 sys.path.append(os.getcwd())  # Ensures import work fine when running from the root directory of the project
 import utils.make_paths_absolute # Important for file paths
 
 import fastparquet as fp
 import logging
-from dataclasses import dataclass
 import pathlib
 
 import pyrosetta
@@ -16,17 +17,10 @@ import pyrosetta
 from extraction.initialisation import initialize_rosetta
 from extraction.main import TestInstanceFactory, ExtractionTestInstance, run_pyrosetta_obj_extraction, \
     from_energies_to_tensors
-from extraction.rotamers import TrackedResidue
 from utils.logging_setup import setup_logging
+from phase2.objects import RescoringConformation
 
 import numpy as np
-import pennylane as qml
-
-from qaoa.devices import get_cached_device
-from qaoa.generators import qaoa_func_generator
-from qaoa.h_mixer import ring_xy_mixer_layer
-from qaoa.hamiltonians import extract_ising_items
-from qaoa.objects import init_basic_params, BasicParams
 import pandas as pd
 from collections import Counter
 
@@ -42,24 +36,6 @@ def extract_one_body_energies_from_instance(inst: ExtractionTestInstance, logger
     one_body, two_body, global_offset = from_energies_to_tensors(residue_library, ig)
     return one_body, two_body, pose, residue_library, ig, rot_sets, scorefxn
 
-qubit_to_shot_map = {
-    5: 10, 6: 10, 7: 100, 8: 10, 9: 10, 10: 100, 11: 100, 12: 100, 13: 100, 14: 100, 18: 100, 22: 400
-}
-
-def get_sample_function_for_phase_2(logger: logging.Logger, one_body, two_body):
-    basic_params: BasicParams = init_basic_params(one_body)
-    num_qubits = basic_params.num_qubits
-    shots = qubit_to_shot_map.get(num_qubits, 500)  # Default to 500 shots if not specified
-
-    coeffs, observables, num_qubits = extract_ising_items(one_body, two_body, logger)
-    cost_hamiltonian = qml.dot(coeffs, observables)
-
-    device_type = 'lightning.qubit'
-    dev = get_cached_device(num_qubits, device_type)
-    logger.info(f"Running on {device_type} for {num_qubits} qubits")
-
-    cost_func, sample_function = qaoa_func_generator(dev, cost_hamiltonian, ring_xy_mixer_layer, basic_params, shots)
-    return sample_function, basic_params
 
 def extract_best_qaoa_params(qaoa_file_path: str):
     assert qaoa_file_path.endswith(".npz"), "Expected a .npz file containing the QAOA results"
@@ -70,102 +46,6 @@ def extract_best_qaoa_params(qaoa_file_path: str):
     optimised_params = data['optimized_params']
     return optimised_params
 
-
-
-def get_and_process_shot_results(sample_func, best_params, logger: logging.Logger):
-    shot_results = {
-        seed: sample_func(best_params[seed])
-        for seed in range(30)  # Assuming 30 seeds as per the original code
-    }
-
-    # return shots results with duplicate bitstrings removed, and a dict of all unique bitstrings and their counts across all seeds
-    unique_bitstrings = set()
-    processed_results = {}
-
-    for seed, shots in shot_results.items():
-        unique_shots = set(tuple(map(int, shot)) for shot in shots)
-        unique_bitstrings.update(unique_shots)
-        processed_results[seed] = unique_shots
-
-    return processed_results, list(unique_bitstrings)
-
-@dataclass
-class RescoringConformation:
-    bitstring: list[int] | None
-    pose: pyrosetta.Pose = None
-    biological_energy: np.float64 = None
-    energy_diff: np.float64 = None
-
-def evaluate_pyrosetta_energies(unique_bitstrings: list[list[int]],
-                                original_pose, scorefxn,
-                                residue_library: dict[int, TrackedResidue], params: BasicParams):
-    conformations = []
-    for bitstring in unique_bitstrings:
-        new_pose = evaluate_singular_pyrosetta_energy(bitstring, original_pose, residue_library, params)
-        biological_energy = np.float64(scorefxn(new_pose))
-        conformations.append(
-            RescoringConformation(
-                bitstring=bitstring,
-                pose=new_pose,
-                biological_energy=biological_energy
-            )
-        )
-    return conformations
-
-def evaluate_singular_pyrosetta_energy(bitstring: list[int], pose,
-                                       residue_library: dict[int, TrackedResidue], params: BasicParams):
-    new_pose = pose.clone()
-
-    seq_positions = params.seq_positions
-    wire_offsets = params.wire_offsets
-    rotamer_counts = params.rotamer_counts
-
-    #Flexible rotamers
-    for seq in seq_positions:
-        base_wire = wire_offsets[seq]
-        num_rots = rotamer_counts[seq]
-
-        residue_bits = bitstring[base_wire : base_wire + num_rots]
-        local_rotamer_idx = residue_bits.index(1)
-
-        res_entry = residue_library[seq]
-        rotamer_entry = res_entry.rotamers[local_rotamer_idx]
-
-        new_pose.replace_residue(seq, rotamer_entry.residue, False)
-
-    # Set "fixed" rotamers
-    all_seq = [key for key in residue_library]
-    for seq in all_seq:
-        if seq in seq_positions: continue
-
-        res_entry = residue_library[seq]
-        rotamer_entry = res_entry.rotamers[0]
-
-        new_pose.replace_residue(seq, rotamer_entry.residue, False)
-
-    return new_pose
-
-def exhaustively_evaluate_all_conformations(unique_bitstrings, original_pose, scorefxn, residue_library: dict[int, TrackedResidue], params: BasicParams):
-    conformations = []
-    for nd_bitstring in unique_bitstrings:
-        bitstring = list(map(int, nd_bitstring))
-        new_pose = evaluate_singular_pyrosetta_energy(bitstring, original_pose, residue_library, params)
-        biological_energy = np.float64(scorefxn(new_pose))
-        conformations.append(
-            RescoringConformation(
-                bitstring=bitstring,
-                pose=new_pose,
-                biological_energy=biological_energy
-            )
-        )
-    return conformations
-
-def compare_scoring_results(scored_conformations: list[RescoringConformation], base_conformation: RescoringConformation, logger: logging.Logger):
-    # Compare the biological energies of the new conformations with the original pose
-    for conf in scored_conformations:
-        energy_diff = conf.biological_energy - base_conformation.biological_energy
-        conf.energy_diff = energy_diff
-        logger.debug(f"Bitstring: {conf.bitstring}, Biological Energy: {conf.biological_energy:.4f}, Energy Difference: {energy_diff:.4f}")
 
 def extract_best_conformation_for_seeds(processed_results: dict[int, set[tuple[int]]], scored_conformations: list[RescoringConformation]):
     best_conformations_per_seed = {}
@@ -184,18 +64,9 @@ def extract_best_conformation_for_seeds(processed_results: dict[int, set[tuple[i
 
     return best_conformations_per_seed
 
-def main(logger: logging.Logger, fac: TestInstanceFactory, results_file, input_pdb, exhaustive_evaluation=False,):
-    stripped_file_name = results_file.split("/")[-1].split(".")[0]
-    test_name, start_str, end_str, rot_count_str, _, _ = stripped_file_name.split("_")
-    start, end, rot_count = int(start_str), int(end_str), int(rot_count_str)
 
-    inst = fac.create_test_instance_from_func(
-        pose_func=lambda: pyrosetta.pose_from_pdb(input_pdb),
-        test_name=test_name,
-        start=start,
-        end=end,
-        rot_count=rot_count
-    )
+def main(logger: logging.Logger, fac: TestInstanceFactory, results_file, input_pdb: str, exhaustive_evaluation=False,):
+    inst = fac.create_test_instance_from_results_file(results_file, input_pdb)
 
     logger.info(f"Extracting one-body and two-body energies for instance {inst.test_name}...")
     phase2_rescoring_logger = logging.getLogger("qaoa.rescoring_phase2")
@@ -204,11 +75,9 @@ def main(logger: logging.Logger, fac: TestInstanceFactory, results_file, input_p
     hidden_logger.info(f"Extracted residues: {residue_library.keys()} --- {residue_library}")
     hidden_logger.info(f"Extracted one-body energies: {one_body.keys()} --- {one_body}")
 
-    sample_func, basic_params = get_sample_function_for_phase_2(hidden_logger, one_body, two_body)
-
     logger.info("Extracting best QAOA parameters from file...")
     best_params = extract_best_qaoa_params(results_file)
-    processed_results, unique_bitstrings = get_and_process_shot_results(sample_func, best_params, phase2_rescoring_logger)
+    processed_results, unique_bitstrings, basic_params = take_qaoa_shots(one_body, two_body, best_params, phase2_rescoring_logger, hidden_logger)
 
     logger.info(f"Evaluating PyRosetta energies for unique bitstrings... Total unique conformations to evaluate: {len(unique_bitstrings)}")
     scored_conformations = evaluate_pyrosetta_energies(unique_bitstrings, pose, scorefxn, residue_library, basic_params)
@@ -219,7 +88,6 @@ def main(logger: logging.Logger, fac: TestInstanceFactory, results_file, input_p
     epsilon_value = 1.5
 
     results = []
-    win_count, tie_count, loss_count = 0, 0, 0
     for seed, conf in best_conf_per_seed.items():
         cur_result = {
             'seed': seed,
@@ -248,6 +116,7 @@ def main(logger: logging.Logger, fac: TestInstanceFactory, results_file, input_p
         logger.debug("Skipping exhaustive evaluation of all conformations. To enable this, set exhaustive_evaluation=True when calling main().")
         return results, best_conf_per_seed
     return results, run_exhaustive_evaluation(logger, basic_params, pose, scorefxn, residue_library, base_conformation)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

@@ -85,16 +85,17 @@ def layered_run(cost_func, sample_func, target_indices, valid_conformations, num
     success_metric = calculate_epsilon_success(final_probs, target_indices)
     target_probs, conf_prob_map, best_idx = extract_metrics_for_serialization(final_probs, target_indices, valid_conformations)
 
-    np.savez(result_path,
-             cost_history=cost_history,
+    np.savez(
+        result_path,
+        cost_history=cost_history,
 
-             target_probs=target_probs,
+        target_probs=target_probs,
 
-             target_indices=target_indices,
-             best_target_index=best_idx,
-             conformation_map=np.array(conf_prob_map, dtype=object),
+        target_indices=target_indices,
+        best_target_index=best_idx,
+        conformation_map=np.array(conf_prob_map, dtype=object),
 
-             optimized_params=optimized_params,
+        optimized_params=optimized_params,
     )
 
     logger.debug(f"Success Metric (P_success) per seed: {success_metric}")

@@ -34,6 +34,9 @@ def _choose_save_folder_by_qubit(one_body) -> tuple[pathlib.Path, int]:
 def save_results_alternate(one_body, two_body, logger, artifact_path):
 
     file_folder, qubit_count = _choose_save_folder_by_qubit(one_body)
+    if qubit_count == 0:
+        logger.warning(f"Skipping saving results for {artifact_path} - contains 0 qubits")
+        return None
     output_file = file_folder.joinpath(artifact_path)
     with open(output_file, 'wb') as f:
         # noinspection PyTypeChecker

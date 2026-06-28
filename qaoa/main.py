@@ -134,8 +134,9 @@ def main(file_path, logger, results_dir):
         result_path = f"{results_dir}/{artifact_base_name}_{layers}_layers.npz"
         cached_params = layered_run(cost_func, sample_func, target_indices, valid_conformations, num_qubits, layers, result_path, cached_params)
 
-def find_limit_energy_files(qubit_counts, limit_files_per_qubit, start_file_idx, source_folder="intermediates/energy_mappings"):
+def find_limit_energy_files(qubit_counts, limit_files_per_qubit, source_folder="intermediates/energy_mappings", start_file_idx=0):
     all_energy_files = {num_qubits: list(pathlib.Path(f"{source_folder}/{num_qubits}").glob("*.pkl")) for num_qubits in qubit_counts}
+    print(f"Found energy files for qubit counts: ", all_energy_files)
 
     # Remove duplicate files across qubit counts, ie. if the file analyses the same residue subsection with the same qubit count, but different rotamer counts it should only be processed once.
     # We keep the first one that appears, since they will have the same one-body and two-body energies, and thus the same QAOA performance.
@@ -152,7 +153,7 @@ def find_limit_energy_files(qubit_counts, limit_files_per_qubit, start_file_idx,
                 seen_files.add(file_without_rotamer_count)
         all_energy_files[num_qubits] = unique_files
 
-
+    print(f"After removing duplicates, found energy files for qubit counts: ", all_energy_files)
     energy_files = {num_qubits: [] for num_qubits in qubit_counts}
     for num_qubits, files in all_energy_files.items():
         if start_file_idx > len(files): continue
@@ -169,16 +170,15 @@ ADDITIVE_FACTOR = 50
 def define_total_processing_estimate(energy_files):
     return sum(len(files) * (ADDITIVE_FACTOR + MULTIPLICATIVE_FACTOR * (EXPONENTIAL_FACTOR ** num_qubits)) for num_qubits, files in energy_files.items())
 
+
 if __name__ == '__main__':
     # Run QAOA for these qubit counts
-    qubit_counts = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    qubit_counts = [4]
     limit_files_per_qubit = 1 # Adjust this to limit the number of files processed per qubit count
-    start_file_idx = 4
-    INSTANCE_ID = start_file_idx
     temp_base = "outputs_2"
 
     # Limit the number of files processed per qubit count to manage total runtime
-    energy_files = find_limit_energy_files(qubit_counts, limit_files_per_qubit, start_file_idx, source_folder="intermediates/energy_mappings")
+    energy_files = find_limit_energy_files(qubit_counts, limit_files_per_qubit, source_folder="intermediates/energy_mappings")
     total_processing_estimate = define_total_processing_estimate(energy_files)
 
 
@@ -203,5 +203,3 @@ if __name__ == '__main__':
 
             current_processed += ADDITIVE_FACTOR + (MULTIPLICATIVE_FACTOR * (EXPONENTIAL_FACTOR ** qubit_count))
             logger.info(f"Completed QAOA runs for {energy_file.name} in {qaoa_time:.2f} seconds - completed {current_processed/total_processing_estimate*100:.3f}% of estimated total processing time\n")
-
-    logger.info(f"\n =============== COMPLETED ALL RUNS FOR {INSTANCE_ID}=============== \n")

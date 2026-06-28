@@ -1,3 +1,5 @@
+import logging
+
 from extraction.rotamers import TrackedResidue
 from phase2.objects import RescoringConformation
 

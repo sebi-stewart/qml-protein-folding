@@ -2,6 +2,7 @@ import logging
 
 import numpy as np
 
+from extraction.rotamers import TrackedResidue
 from phase2.biological_rescoring import evaluate_singular_pyrosetta_energy, compare_scoring_results
 from phase2.objects import RescoringConformation
 from qaoa.objects import BasicParams

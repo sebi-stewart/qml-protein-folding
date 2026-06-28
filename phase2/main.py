@@ -1,12 +1,13 @@
 import argparse
 import os, sys
+sys.path.append(os.getcwd())  # Ensures import work fine when running from the root directory of the project
+import utils.make_paths_absolute # Important for file paths
 
 from phase2.biological_rescoring import evaluate_pyrosetta_energies, compare_scoring_results
 from phase2.exhaustive_evaluation import run_exhaustive_evaluation
 from phase2.qaoa_shots import take_qaoa_shots
 
-sys.path.append(os.getcwd())  # Ensures import work fine when running from the root directory of the project
-import utils.make_paths_absolute # Important for file paths
+
 
 import fastparquet as fp
 import logging
@@ -110,7 +111,7 @@ def main(logger: logging.Logger, fac: TestInstanceFactory, results_file, input_p
         results.append(cur_result)
 
     classification_counts = Counter(result['classification'] for result in results)
-    logger.info(f"Summary of results: {classification_counts} losses out of {len(best_conf_per_seed)} seeds.")
+    logger.info(f"Summary of results: {classification_counts}")
 
     if not exhaustive_evaluation:
         logger.debug("Skipping exhaustive evaluation of all conformations. To enable this, set exhaustive_evaluation=True when calling main().")
@@ -122,17 +123,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--input_pdb", type=str, default="inputs/structural_files/AF-P00974-F1-model_v6.pdb", help="Path to the input PDB file")
-    parser.add_argument("--qaoa_results_folder", type=str, default="outputs_2", help="Path to the folder containing QAOA results files (NPZ format)")
+    parser.add_argument("--qaoa_results_folder", type=str, default="outputs", help="Path to the folder containing QAOA results files (NPZ format)")
     parser.add_argument("--file_search_pattern", type=str, default="*_12_layers.npz", help="Pattern to search for QAOA result files in the specified folder")
 
-    parser.add_argument("--output_dir", type=str, default="outputs_5", help="Directory to save the extraction results")
     parser.add_argument("--log_dir", type=str, default="outputs/logs", help="Directory to save the logs")
     parser.add_argument("--log_file", type=str, default="results_rescoring", help="Name of the log file")
 
-    parser.add_argument("--exhaustive_evaluation", action="store_false", help="Whether to perform exhaustive evaluation of all conformations, and save the best and worst poses to PDB files. If set, this will override the --save_best_pose flag.")
-    parser.add_argument("--parquet_output_dir", type=str, default="outputs_3", help="Path to save the aggregated results in Parquet format")
-    parser.add_argument("--parquet_file_name", type=str, default="test2.parquet", help="Name of the Parquet file to save the aggregated results")
-    parser.add_argument("--save_best_pose", action="store_false", help="Whether to save the best pose to PDB (ignored during exhaustive evaluation)")
+    parser.add_argument("--exhaustive_evaluation", action="store_true", help="Whether to perform exhaustive evaluation of all conformations, and save the best and worst poses to PDB files. If set, this will override the --save_best_pose flag.")
+    parser.add_argument("--parquet_output_dir", type=str, default="outputs", help="Path to save the aggregated results in Parquet format")
+    parser.add_argument("--parquet_file_name", type=str, default="test.parquet", help="Name of the Parquet file to save the aggregated results")
+    parser.add_argument("--save_best_pose", action="store_true", help="Whether to save the best pose to PDB (ignored during exhaustive evaluation)")
+    parser.add_argument("--pose_output_dir", type=str, default="outputs/structural_files", help="Directory to save the best and worst poses in PDB format (ignored if both exhaustive evaluation and save_best_pose are disabled)")
 
     args = parser.parse_args()
 
@@ -140,23 +141,26 @@ if __name__ == "__main__":
     initialize_rosetta(pyrosetta, extra_flags="-mute all")
     fac = TestInstanceFactory()
 
+    if args.exhaustive_evaluation or args.save_best_pose:
+        pathlib.Path(args.pose_output_dir).mkdir(parents=True, exist_ok=True)
+
     results = []
 
     for file in pathlib.Path(args.qaoa_results_folder).rglob(args.file_search_pattern):
         if "old" in str(file).lower() or "partial" in str(file).lower(): continue
 
         logger.info(f"Processing file: {str(file)}")
-        cur_results, conformations = main(logger, fac, results_file=str(file), input_pdb=args.input_pdb, exhaustive_evaluation=args.exhaustive_evaluation, )
+        cur_results, conformations = main(logger, fac, results_file=str(file), input_pdb=args.input_pdb, exhaustive_evaluation=args.exhaustive_evaluation)
         if args.exhaustive_evaluation:
             worst_conf = conformations["worst"]
             best_conf = conformations["best"]
-            logger.info(f"Best and worst conformations from exhaustive evaluation for {str(file)} - Dumping poses to best_pose_{file.stem}.pdb and worst_conformation_{file.stem}.pdb for further analysis.")
-            best_conf.pose.dump_pdb(f"best_pose_{file.stem}.pdb")
-            worst_conf.pose.dump_pdb(f"worst_conformation_{file.stem}.pdb")
+            logger.info(f"Best and worst conformations from exhaustive evaluation for {str(file)} - Dumping poses to best_pose_{file.stem}.pdb and worst_conformation_{file.stem}.pdb for further analysis. Located in {args.pose_output_dir}.")
+            best_conf.pose.dump_pdb(f"{args.pose_output_dir}/best_pose_{file.stem}.pdb")
+            worst_conf.pose.dump_pdb(f"{args.pose_output_dir}/worst_conformation_{file.stem}.pdb")
         elif args.save_best_pose:
             best_conf = min(conformations.values(), key=lambda conf: conf.energy_diff)
-            logger.info(f"Best conformation for {str(file)}: Bitstring: {best_conf.bitstring}, Biological Energy: {best_conf.biological_energy:.4f}, Energy Difference: {best_conf.energy_diff:.4f}. Dumped pose to best_pose_{file.stem}.pdb for further analysis.")
-            best_conf.pose.dump_pdb(f"best_pose_{file.stem}.pdb")
+            logger.info(f"Best conformation for {str(file)}: Bitstring: {best_conf.bitstring}, Biological Energy: {best_conf.biological_energy:.4f}, Energy Difference: {best_conf.energy_diff:.4f}. Dumped pose to best_pose_{file.stem}.pdb for further analysis. Located in {args.pose_output_dir}.")
+            best_conf.pose.dump_pdb(f"{args.pose_output_dir}/best_pose_{file.stem}.pdb")
 
         results.extend(cur_results)
 

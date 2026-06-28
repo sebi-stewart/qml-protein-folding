@@ -2,9 +2,9 @@ import os, sys
 sys.path.append(os.getcwd())  # Ensures import work fine when running from the root directory of the project
 import utils.make_paths_absolute # Important for file paths
 
+from utils.loading_energy_mappings import load_energy_mappings
 import logging
 import pathlib
-import json
 import time
 
 import numpy as np
@@ -55,18 +55,7 @@ def _run_qaoa(cost_func, sample_func, qaoa_params, seed_versions, num_qubits, ma
 BASE_EPOCHS = 150
 BASE_STEPSIZE = 0.01
 
-def load_qaoa_data(source_path):
-    with open(source_path, 'r') as f:
-        raw = json.load(f)
-    one_body = {int(k): {int(rk): rv for rk, rv in v.items()} for k, v in raw['one_body'].items()}
-    two_body = {
-        tuple(int(x) for x in k.split(',')): {
-            tuple(int(x) for x in rk.split(',')): rv
-            for rk, rv in interactions.items()
-        }
-        for k, interactions in raw['two_body'].items()
-    }
-    return one_body, two_body
+
 
 def layered_run(cost_func, sample_func, target_indices, valid_conformations, num_qubits, qaoa_layers, result_path, previous_params=None):
     # previous_params=None
@@ -113,7 +102,7 @@ def main(file_path, logger, results_dir):
 
     artifact_base_name = file_path.split("/")[-1].split(".")[0]
 
-    one_body, two_body = load_qaoa_data(file_path)
+    one_body, two_body = load_energy_mappings(file_path)
 
     basic_params: BasicParams = init_basic_params(one_body)
 

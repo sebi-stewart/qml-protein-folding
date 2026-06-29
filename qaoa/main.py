@@ -175,7 +175,7 @@ if __name__ == '__main__':
     temp_base = "outputs_2"
 
     # Limit the number of files processed per qubit count to manage total runtime
-    energy_files = find_limit_energy_files(qubit_counts, limit_files_per_qubit, source_folder="intermediates/energy_mappings/Phase2_lower_confidence_region")
+    energy_files = find_limit_energy_files(qubit_counts, limit_files_per_qubit, source_folder="intermediates/energy_mappings/AF-5PTI_moderate_confidence_region")
     total_processing_estimate = define_total_processing_estimate(energy_files)
 
 

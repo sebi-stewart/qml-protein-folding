@@ -2,11 +2,7 @@
 Dataclasses and simple initialisation helpers for QAOA parameter objects.
 Defines container types for run parameters and a helper to build wire/rotamer mappings.
 """
-
 from dataclasses import dataclass
-
-from utils.constants import QAOA_LAYERS, OPTIMISER_STEPSIZE, OPTIMISER_EPOCHS
-
 
 @dataclass
 class QAOAParams:
@@ -14,12 +10,7 @@ class QAOAParams:
     optimiser_stepsize: float
     epochs: int
 
-def default_qaoa_params() -> QAOAParams:
-    return QAOAParams(
-        QAOA_LAYERS,
-        OPTIMISER_STEPSIZE,
-        OPTIMISER_EPOCHS
-    )
+
 
 @dataclass
 class BasicParams:

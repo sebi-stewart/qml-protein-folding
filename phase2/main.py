@@ -120,14 +120,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--input_pdb", type=str, default="inputs/structural_files/AF-P00974-F1-model_v6.pdb", help="Path to the input PDB file")
-    parser.add_argument("--qaoa_results_folder", type=str, default="outputs", help="Path to the folder containing QAOA results files (NPZ format)")
+    parser.add_argument("--qaoa_results_folder", type=str, default="outputs/npz_files/test", help="Path to the folder containing QAOA results files (NPZ format)")
     parser.add_argument("--file_search_pattern", type=str, default="*_12_layers.npz", help="Pattern to search for QAOA result files in the specified folder")
 
     parser.add_argument("--log_dir", type=str, default="outputs/logs", help="Directory to save the logs")
     parser.add_argument("--log_file", type=str, default="results_rescoring", help="Name of the log file")
 
     parser.add_argument("--exhaustive_evaluation", action="store_true", help="Whether to perform exhaustive evaluation of all conformations, and save the best and worst poses to PDB files. If set, this will override the --save_best_pose flag.")
-    parser.add_argument("--parquet_output_dir", type=str, default="outputs", help="Path to save the aggregated results in Parquet format")
+    parser.add_argument("--parquet_output_dir", type=str, default="outputs/dataframes/test", help="Path to save the aggregated results in Parquet format")
     parser.add_argument("--parquet_file_name", type=str, default="test.parquet", help="Name of the Parquet file to save the aggregated results")
     parser.add_argument("--save_best_pose", action="store_true", help="Whether to save the best pose to PDB (ignored during exhaustive evaluation)")
     parser.add_argument("--pose_output_dir", type=str, default="outputs/structural_files", help="Directory to save the best and worst poses in PDB format (ignored if both exhaustive evaluation and save_best_pose are disabled)")

@@ -5,7 +5,7 @@ Provides a TestInstanceFactory and command-line entrypoint to run and persist ex
 
 import os, sys
 sys.path.append(os.getcwd())  # Ensures import work fine when running from the root directory of the project
-import utils.make_paths_absolute # Important for file paths
+import utils.make_paths_absolute # Important for file paths # noqa
 
 import logging
 from dataclasses import dataclass

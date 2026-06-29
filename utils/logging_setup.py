@@ -3,7 +3,7 @@ Configure application logging to isolate project logs from noisy third-party lib
 Sets up a dedicated file logger and a console handler with sensible default levels.
 """
 
-import utils.make_paths_absolute # Inportant for file paths
+import utils.make_paths_absolute # Inportant for file paths # noqa
 
 import logging
 import sys

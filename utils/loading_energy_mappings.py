@@ -5,7 +5,6 @@ Parses one-body and two-body sections into integer-indexed structures for downst
 
 import json
 
-
 def load_energy_mappings(source_path):
     with open(source_path, 'r') as f:
         raw = json.load(f)

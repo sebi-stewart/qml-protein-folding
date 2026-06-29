@@ -5,7 +5,7 @@ This module loads reduced Hamiltonians, prepares devices and executes layered ru
 
 import os, sys
 sys.path.append(os.getcwd())  # Ensures import work fine when running from the root directory of the project
-import utils.make_paths_absolute # Important for file paths
+import utils.make_paths_absolute # Important for file paths # noqa
 
 from utils.loading_energy_mappings import load_energy_mappings
 import logging

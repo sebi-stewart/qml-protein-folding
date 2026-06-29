@@ -6,8 +6,8 @@ This module extracts energies, applies rescoring with PyRosetta, and can run exh
 import argparse
 import os, sys
 sys.path.append(os.getcwd())  # Ensures import work fine when running from the root directory of the project
-import utils.make_paths_absolute # Important for file paths
-import fastparquet as fp
+import utils.make_paths_absolute # Important for file paths # noqa
+import fastparquet as fp # Important for saving results in Parquet format # noqa
 
 from phase2.biological_rescoring import evaluate_pyrosetta_energies, compare_scoring_results
 from phase2.exhaustive_evaluation import run_exhaustive_evaluation

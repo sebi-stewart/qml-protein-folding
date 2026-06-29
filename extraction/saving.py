@@ -6,7 +6,7 @@ This module chooses appropriate subfolders by qubit count and writes JSON energy
 import json
 import pathlib
 
-import utils.make_paths_absolute # Inportant for file paths
+import utils.make_paths_absolute # Inportant for file paths # noqa
 
 from qaoa.objects import init_basic_params
 

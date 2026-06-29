@@ -1,3 +1,4 @@
+jax
 fastparquet
 catalyst
 pennylane-catalyst

@@ -1,3 +1,8 @@
+"""
+Entry point for phase 2 rescoring and analysis of QAOA results.
+This module extracts energies, applies rescoring with PyRosetta, and can run exhaustive comparisons.
+"""
+
 import argparse
 import os, sys
 sys.path.append(os.getcwd())  # Ensures import work fine when running from the root directory of the project

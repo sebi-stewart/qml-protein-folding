@@ -1,3 +1,8 @@
+"""
+Convert reduced one- and two-body biological tensors into a PennyLane Ising-style Hamiltonian.
+Builds Pauli-Z and identity terms and returns coefficients, observables, and total qubit count.
+"""
+
 import logging
 import pennylane as qml
 

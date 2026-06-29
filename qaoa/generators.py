@@ -1,3 +1,8 @@
+"""
+Create parameterised PennyLane QAOA cost and sample functions for a given device and Hamiltonian.
+The generator builds initial states, cost and mixing layers and returns a cost expectation and a sampler.
+"""
+
 import numpy as np
 import pennylane as qml
 from qaoa.objects import BasicParams

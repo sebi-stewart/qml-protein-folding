@@ -1,3 +1,8 @@
+"""
+Execution strategies for QAOA runs, including batched and sequential seed execution.
+Implements memory-aware batching, warm-start alignment, and early-stopping logic for optimisers.
+"""
+
 import logging
 import math
 

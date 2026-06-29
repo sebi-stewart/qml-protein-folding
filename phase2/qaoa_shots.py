@@ -1,3 +1,8 @@
+"""
+Helpers to configure a PennyLane QAOA sampler and collect shot-based samples for phase 2 rescoring.
+Provides utilities to build a device, generate sampling functions, and deduplicate sampled bitstrings.
+"""
+
 import logging
 import pennylane as qml
 

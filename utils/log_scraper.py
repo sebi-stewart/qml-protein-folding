@@ -1,3 +1,8 @@
+"""
+Small script to parse experiment log files and summarise runtimes by qubit count and layer usage.
+Reads log files, extracts timing and layer information, and writes a parquet summary for analysis.
+"""
+
 import pathlib
 from collections import defaultdict
 import pandas as pd

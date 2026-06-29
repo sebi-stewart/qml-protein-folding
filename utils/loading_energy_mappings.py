@@ -1,3 +1,8 @@
+"""
+Load saved energy-mapping JSON files and convert them into Python tensor dictionaries.
+Parses one-body and two-body sections into integer-indexed structures for downstream use.
+"""
+
 import json
 
 

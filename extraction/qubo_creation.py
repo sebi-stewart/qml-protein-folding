@@ -1,3 +1,8 @@
+"""
+Convert tracked residue rotamer energies and interaction graphs into one- and two-body tensors.
+This module extracts raw Hamiltonian terms and reduces them to a quantum-ready flexible-residue representation.
+"""
+
 import itertools
 from pyrosetta.rosetta.core.pack.interaction_graph import InteractionGraphFactory
 

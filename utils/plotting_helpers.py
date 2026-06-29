@@ -1,3 +1,8 @@
+"""
+Small helpers to load and aggregate QAOA result files for plotting and analysis.
+Includes routines to map energy files to qubit counts and to build dataframes of target probabilities.
+"""
+
 import pathlib
 
 import numpy as np

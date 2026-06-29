@@ -1,3 +1,8 @@
+"""
+Evaluate and compare PyRosetta biological energies for sampled conformations.
+This module rescoring sampled bitstrings into Pose objects and annotates energy differences vs a baseline.
+"""
+
 import logging
 
 from extraction.rotamers import TrackedResidue

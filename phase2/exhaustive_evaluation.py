@@ -1,3 +1,8 @@
+"""
+Perform exhaustive evaluation of all valid conformations to analyse the full energy landscape.
+This module converts bitstrings to poses, scores them biologically, and reports best/worst conformations.
+"""
+
 import logging
 
 import numpy as np

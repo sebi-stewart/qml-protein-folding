@@ -1,3 +1,8 @@
+"""
+Helpers to persist extracted energy tensors and manage the energy-mapping folder structure.
+This module chooses appropriate subfolders by qubit count and writes JSON energy mapping artifacts.
+"""
+
 import json
 import pathlib
 

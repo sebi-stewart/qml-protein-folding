@@ -1,3 +1,8 @@
+"""
+Device caching helpers for PennyLane devices used by QAOA routines.
+Provides a simple cache to reuse device instances across runs and avoid reinitialisation overhead.
+"""
+
 import pennylane as qml
 
 _DEVICE_CACHE = {}

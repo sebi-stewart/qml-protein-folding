@@ -1,3 +1,8 @@
+"""
+High-level extraction runner: orchestrates rotamer extraction and tensor creation for QAOA.
+Provides a TestInstanceFactory and command-line entrypoint to run and persist extraction jobs.
+"""
+
 import os, sys
 sys.path.append(os.getcwd())  # Ensures import work fine when running from the root directory of the project
 import utils.make_paths_absolute # Important for file paths

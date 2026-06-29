@@ -1,3 +1,8 @@
+"""
+Utilities to enumerate valid conformations and compute QUBO energies for scoring.
+This module builds the valid bitstring matrix, converts sparse tensors to dense QUBO form, and finds low-energy solutions.
+"""
+
 import logging
 from itertools import product
 

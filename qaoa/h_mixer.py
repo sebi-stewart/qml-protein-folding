@@ -1,3 +1,8 @@
+"""
+Mixer layer definitions for QAOA that apply IsingXY interactions within rotamer bundles.
+Provides both a custom full-mixer and a ring-style XY mixer for flexible residues.
+"""
+
 import pennylane as qml
 
 def custom_xy_mixer_layer(beta, wire_offsets, seq_positions, rotamer_counts):

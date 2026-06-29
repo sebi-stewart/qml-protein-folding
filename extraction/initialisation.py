@@ -1,8 +1,9 @@
+"""
+Initialize PyRosetta with conservative flags to avoid unrecognized residues and other junk.
+This function centralises the initialisation flags used across extraction workflows.
+"""
+
 def initialize_rosetta(pyrosetta, extra_flags: str) -> None:
-    """
-    Initializes PyRosetta with strict flags to ignore junk data,
-    then loads and returns a clean Pose object.
-    """
 
     # -ignore_unrecognized_res --> Skips drugs, weird metals, or unknown amino acids
     clean_flags = "-ignore_unrecognized_res"

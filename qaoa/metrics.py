@@ -1,3 +1,8 @@
+"""
+Small metric helpers to compute success probabilities and to package results for serialization.
+Calculates seed-wise P_success for target conformations and builds payloads for result files.
+"""
+
 import jax.numpy as jnp
 import numpy as np
 import jax

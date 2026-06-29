@@ -1,3 +1,8 @@
+"""
+Locate and score rotamer libraries for packable residues in a Pose using PyRosetta.
+This module extracts top rotamers, computes one- and two-body terms, and constructs interaction graphs.
+"""
+
 from dataclasses import dataclass
 import logging
 

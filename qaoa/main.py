@@ -1,3 +1,8 @@
+"""
+Main QAOA runner and orchestration utilities to launch layered QAOA experiments.
+This module loads reduced Hamiltonians, prepares devices and executes layered runs while saving results.
+"""
+
 import os, sys
 sys.path.append(os.getcwd())  # Ensures import work fine when running from the root directory of the project
 import utils.make_paths_absolute # Important for file paths

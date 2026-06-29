@@ -1,3 +1,8 @@
+"""
+Ensure the current working directory is set to the repository root so relative paths are stable.
+This module changes the process CWD on import to make notebooks and scripts path-independent.
+"""
+
 from os import chdir
 from pathlib import Path
 

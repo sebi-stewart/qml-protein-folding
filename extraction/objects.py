@@ -1,3 +1,8 @@
+"""
+Simple dataclasses representing rotamers and tracked residues during extraction.
+These lightweight containers record energies and index mappings used in tensor extraction.
+"""
+
 from dataclasses import dataclass
 
 

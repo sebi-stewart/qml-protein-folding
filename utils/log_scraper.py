@@ -2,7 +2,7 @@ import pathlib
 from collections import defaultdict
 import pandas as pd
 
-log_files = pathlib.Path("../outputs/runs_before_round_robin_rotamers_param/QAOA_Results_Backup_3").rglob("*.log")
+log_files = pathlib.Path("../outputs/npz_files/QAOA_Results_Backup_3").rglob("*.log")
 
 runtimes = defaultdict(list)
 
